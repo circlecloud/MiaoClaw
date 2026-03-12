@@ -1,0 +1,15 @@
+{
+  "name": "system-info",
+  "version": "0.1.0",
+  "description": "获取系统信息（CPU、内存、磁盘、网络等）",
+  "entry": "./index.ts",
+  "permissions": ["system.info"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "miaoclaw": {
+    "pet_reactions": ["think"],
+    "channel_support": []
+  }
+}

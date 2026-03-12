@@ -1,0 +1,37 @@
+{
+  "name": "miaoclaw",
+  "private": true,
+  "version": "0.1.0",
+  "description": "桌面宠物 + 个人AI助理，兼容 OpenClaw 插件生态",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "@tauri-apps/plugin-sql": "^2.2.0",
+    "@tauri-apps/plugin-autostart": "^2.2.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.0",
+    "pixi.js": "^8.9.0",
+    "lottie-react": "^2.4.0",
+    "three": "^0.175.0",
+    "tailwindcss": "^4.1.0",
+    "@tailwindcss/vite": "^4.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/three": "^0.175.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "@vitejs/plugin-react": "^4.4.0"
+  }
+}

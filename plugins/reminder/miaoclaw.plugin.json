@@ -1,0 +1,15 @@
+{
+  "name": "reminder",
+  "version": "0.1.0",
+  "description": "日程提醒和定时任务，支持自然语言设置提醒",
+  "entry": "./index.ts",
+  "permissions": [],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "miaoclaw": {
+    "pet_reactions": ["wave", "talk"],
+    "channel_support": ["telegram", "discord"]
+  }
+}

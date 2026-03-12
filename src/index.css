@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* 宠物窗口透明背景 */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 自定义动画 */
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes walk {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(4px) rotate(5deg); }
+  75% { transform: translateX(-4px) rotate(-5deg); }
+}
+
+@keyframes talk {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes sleep {
+  0%, 100% { transform: rotate(0deg); opacity: 0.8; }
+  50% { transform: rotate(-5deg); opacity: 0.6; }
+}
+
+@keyframes happy {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(5deg); }
+  75% { transform: scale(1.1) rotate(-5deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-8px); opacity: 0.6; }
+}
+
+.animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
+.animate-walk { animation: walk 0.6s ease-in-out infinite; }
+.animate-talk { animation: talk 0.4s ease-in-out infinite; }
+.animate-sleep { animation: sleep 3s ease-in-out infinite; }
+.animate-happy { animation: happy 0.5s ease-in-out infinite; }
+.animate-sad { animation: bounce-slow 4s ease-in-out infinite; opacity: 0.7; }
+.animate-think { animation: bounce-slow 1.5s ease-in-out infinite; }
+.animate-wave { animation: happy 0.3s ease-in-out infinite; }
+.animate-eat { animation: talk 0.3s ease-in-out infinite; }
+.animate-float { animation: float 2s ease-in-out infinite; }

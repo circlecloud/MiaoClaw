@@ -1,2 +1,38 @@
 .narrafork/
 .worktrees/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Rust
+*.pdb
+**/*.rs.bk
+
+# Tauri
+src-tauri/gen/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Desktop.ini

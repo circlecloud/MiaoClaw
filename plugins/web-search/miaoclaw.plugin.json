@@ -1,0 +1,22 @@
+{
+  "name": "web-search",
+  "version": "0.1.0",
+  "description": "网页搜索工具，让 AI 能搜索互联网获取最新信息",
+  "entry": "./index.ts",
+  "permissions": ["net.fetch"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "engine": {
+        "type": "string",
+        "enum": ["duckduckgo", "google", "bing"],
+        "default": "duckduckgo"
+      }
+    },
+    "additionalProperties": false
+  },
+  "miaoclaw": {
+    "pet_reactions": ["think"],
+    "channel_support": []
+  }
+}
