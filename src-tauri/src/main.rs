@@ -32,8 +32,30 @@ fn main() {
             plugin_call_tool,
             pet_get_state,
         ])
-        .setup(|_app| {
+        .setup(|app| {
             tracing::info!("MiaoClaw 启动中...");
+
+            // macOS: 设置窗口背景透明
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("pet") {
+                    use objc2_app_kit::{NSColor, NSWindow};
+                    use objc2_foundation::MainThreadMarker;
+                    let ns_window = window.ns_window().unwrap() as *mut NSWindow;
+                    unsafe {
+                        let mtm = MainThreadMarker::new().unwrap();
+                        let color = NSColor::clearColor();
+                        (*ns_window).setBackgroundColor(Some(&color));
+                        (*ns_window).setOpaque(false);
+                        (*ns_window).setHasShadow(false);
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = app;
+
             // TODO: 加载配置、初始化 AI Provider、启动 Channel、加载插件
             Ok(())
         })

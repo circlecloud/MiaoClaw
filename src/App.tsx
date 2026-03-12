@@ -33,12 +33,14 @@ export default function App() {
         className="w-full h-full cursor-grab active:cursor-grabbing"
         data-tauri-drag-region
       >
-        <PetRenderer
-          style={currentStyle}
-          animation={currentAnimation}
-          width={256}
-          height={256}
-        />
+        <div className="pointer-events-none">
+          <PetRenderer
+            style={currentStyle}
+            animation={currentAnimation}
+            width={256}
+            height={256}
+          />
+        </div>
       </div>
     );
   }

@@ -1,13 +1,18 @@
 @import "tailwindcss";
 
 /* 宠物窗口透明背景 */
-html, body {
+html, body, #root {
   margin: 0;
   padding: 0;
   background: transparent;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
 }
 
 /* 自定义动画 */
