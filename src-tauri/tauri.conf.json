@@ -70,7 +70,7 @@
   "plugins": {
     "shell": { "open": true },
     "sql": { "preload": { "db": "sqlite:miaoclaw.db" } },
-    "autostart": { "macosLaunchAgent": true },
+    "autostart": null,
     "global-shortcut": {}
   }
 }
