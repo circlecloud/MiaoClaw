@@ -68,9 +68,6 @@
     ]
   },
   "plugins": {
-    "shell": { "open": true },
-    "sql": { "preload": { "db": "sqlite:miaoclaw.db" } },
-    "autostart": null,
-    "global-shortcut": null
+    "shell": { "open": true }
   }
 }
