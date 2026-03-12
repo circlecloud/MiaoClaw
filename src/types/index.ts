@@ -36,18 +36,7 @@ export interface PetState {
   currentAnimation: PetAnimation;
   positionX: number;
   positionY: number;
-  mood: number; // 0-1
-}
-
-/// AI Provider 配置
-export interface ProviderConfig {
-  id: string;
-  providerType: "ollama" | "openai_compat";
-  displayName: string;
-  baseUrl: string;
-  apiKey?: string;
-  defaultModel?: string;
-  enabled: boolean;
+  mood: number;
 }
 
 /// 对话消息
@@ -77,13 +66,91 @@ export interface PluginInfo {
   source: "builtin" | "user" | "openclaw";
 }
 
-/// 应用配置
+// ─── 配置类型 (与 Rust config::types 对齐) ───
+
 export interface AppConfig {
-  providers: ProviderConfig[];
-  defaultProvider?: string;
-  petStyle: PetStyle;
+  identity: IdentityConfig;
+  models: ModelsConfig;
+  channels: ChannelsConfig;
+  plugins: PluginsConfig;
+  pet: PetConfig;
+}
+
+export interface IdentityConfig {
+  name: string;
+  theme: string;
+  emoji: string;
+  soul_path?: string;
+}
+
+export interface ModelsConfig {
+  primary?: string;
+  fallbacks: string[];
+  providers: Record<string, ProviderEntry>;
+}
+
+export interface ProviderEntry {
+  baseUrl: string;
+  apiKey?: string;
+  enabled: boolean;
+  displayName?: string;
+}
+
+export interface ChannelsConfig {
+  telegram?: TelegramConfig;
+  discord?: DiscordConfig;
+  slack?: SlackConfig;
+  websocket?: WebSocketConfig;
+}
+
+export interface TelegramConfig {
+  enabled: boolean;
+  botToken: string;
+  dmPolicy: string;
+  allowFrom: string[];
+}
+
+export interface DiscordConfig {
+  enabled: boolean;
+  botToken: string;
+  clientId: string;
+  dmPolicy: string;
+  allowFrom: string[];
+  guilds: Record<string, GuildConfig>;
+}
+
+export interface GuildConfig {
+  channels: string[];
+  requireMention: boolean;
+}
+
+export interface SlackConfig {
+  enabled: boolean;
+  botToken: string;
+  appToken: string;
+  dmPolicy: string;
+  allowFrom: string[];
+}
+
+export interface WebSocketConfig {
+  enabled: boolean;
+  port: number;
+  token?: string;
+}
+
+export interface PluginsConfig {
+  dirs: string[];
+  config: Record<string, unknown>;
+}
+
+export interface PetConfig {
+  style: string;
   alwaysOnTop: boolean;
   autoStart: boolean;
   globalShortcut: string;
-  language: "zh-CN" | "en-US";
+}
+
+export interface ValidateResult {
+  valid: boolean;
+  message: string;
 }

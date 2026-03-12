@@ -3,6 +3,7 @@ use tauri::State;
 
 use crate::ai::{AIRouter, ChatMessage, ModelOptions};
 use crate::channel::ChannelManager;
+use crate::config::{AppConfig, ConfigManager};
 use crate::plugin::PluginEngine;
 
 /// 错误类型包装，让 Tauri 能序列化
@@ -20,6 +21,79 @@ impl<E: std::fmt::Display> From<E> for CommandError {
 }
 
 type CmdResult<T> = Result<T, String>;
+
+// ─── Config Commands ───
+
+#[tauri::command]
+pub async fn config_get(manager: State<'_, ConfigManager>) -> CmdResult<AppConfig> {
+    Ok(manager.get().await)
+}
+
+#[tauri::command]
+pub async fn config_update(
+    manager: State<'_, ConfigManager>,
+    config: AppConfig,
+) -> CmdResult<()> {
+    manager.update(config).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn config_patch(
+    manager: State<'_, ConfigManager>,
+    patch: serde_json::Value,
+) -> CmdResult<AppConfig> {
+    manager.patch(patch).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn config_is_first_run(manager: State<'_, ConfigManager>) -> bool {
+    manager.is_first_run()
+}
+
+#[tauri::command]
+pub async fn config_validate_provider(
+    base_url: String,
+    api_key: Option<String>,
+    provider_type: String,
+) -> CmdResult<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let (url, needs_auth) = match provider_type.as_str() {
+        "ollama" => (format!("{}/api/tags", base_url.trim_end_matches('/')), false),
+        _ => (format!("{}/v1/models", base_url.trim_end_matches('/')), true),
+    };
+
+    let mut req = client.get(&url);
+    if needs_auth {
+        if let Some(key) = &api_key {
+            req = req.bearer_auth(key);
+        }
+    }
+
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() {
+                Ok(serde_json::json!({
+                    "valid": true,
+                    "message": "连接成功"
+                }))
+            } else {
+                Ok(serde_json::json!({
+                    "valid": false,
+                    "message": format!("服务返回错误: {}", status)
+                }))
+            }
+        }
+        Err(e) => Ok(serde_json::json!({
+            "valid": false,
+            "message": format!("连接失败: {}", e)
+        })),
+    }
+}
 
 // ─── AI Commands ───
 

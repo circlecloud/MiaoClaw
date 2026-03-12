@@ -30,17 +30,21 @@ export default function App() {
   if (route === "pet") {
     return (
       <div
-        className="w-full h-full cursor-grab active:cursor-grabbing"
+        className="w-full h-full"
         data-tauri-drag-region
+        style={{
+          // @ts-expect-error webkit vendor prefix
+          WebkitAppRegion: "drag",
+          cursor: "grab",
+          backgroundColor: "transparent",
+        }}
       >
-        <div className="pointer-events-none">
-          <PetRenderer
-            style={currentStyle}
-            animation={currentAnimation}
-            width={256}
-            height={256}
-          />
-        </div>
+        <PetRenderer
+          style={currentStyle}
+          animation={currentAnimation}
+          width={256}
+          height={256}
+        />
       </div>
     );
   }
