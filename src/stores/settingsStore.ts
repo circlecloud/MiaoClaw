@@ -17,7 +17,7 @@ const defaultConfig: AppConfig = {
   channels: {},
   plugins: { dirs: [], config: {} },
   pet: {
-    style: "css",
+    style: "smd",
     alwaysOnTop: true,
     autoStart: false,
     globalShortcut: "CommandOrControl+Shift+M",

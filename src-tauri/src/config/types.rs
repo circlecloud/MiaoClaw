@@ -175,7 +175,7 @@ fn default_shortcut() -> String { "CommandOrControl+Shift+M".into() }
 impl Default for PetConfig {
     fn default() -> Self {
         Self {
-            style: "css".into(),
+            style: "smd".into(),
             always_on_top: true,
             auto_start: false,
             global_shortcut: default_shortcut(),

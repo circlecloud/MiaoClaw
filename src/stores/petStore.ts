@@ -9,7 +9,7 @@ interface PetStore extends PetState {
 }
 
 export const usePetStore = create<PetStore>((set) => ({
-  currentStyle: "css",
+  currentStyle: "smd",
   currentAnimation: "idle",
   positionX: 100,
   positionY: 100,
