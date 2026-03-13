@@ -107,7 +107,9 @@ fn main() {
             app.manage(channel_manager);
             app.manage(plugin_engine);
 
-            // 7. macOS: 设置窗口 + WebView 背景透明
+            // 7. 平台特定：设置窗口 + WebView 背景透明
+
+            // macOS
             #[cfg(target_os = "macos")]
             {
                 if let Some(window) = app.get_webview_window("pet") {
@@ -119,18 +121,25 @@ fn main() {
                     let ns_window = window.ns_window().unwrap() as id;
 
                     unsafe {
-                        // 窗口透明
                         let clear = NSColor::clearColor(nil);
                         ns_window.setBackgroundColor_(clear);
                         ns_window.setOpaque_(NO);
                         ns_window.setHasShadow_(NO);
 
-                        // 关键：WKWebView 透明
                         let ns_view = window.ns_view().unwrap() as id;
                         let key = NSString::alloc(nil)
                             .init_str("drawsBackground");
                         let _: () = msg_send![ns_view, setValue: NO forKey: key];
                     }
+                }
+            }
+
+            // Windows
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.get_webview_window("pet") {
+                    use tauri::window::Color;
+                    let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
                 }
             }
 
