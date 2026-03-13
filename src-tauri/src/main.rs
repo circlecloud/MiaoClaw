@@ -66,32 +66,29 @@ fn main() {
 
             // 3. 初始化 AI Router
             let ai_router = AIRouter::new();
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async {
-                for (id, entry) in &config.models.providers {
-                    if !entry.enabled {
-                        continue;
-                    }
-                    let provider: Box<dyn miaoclaw_lib::ai::AIProvider> = if id == "ollama" {
-                        Box::new(OllamaProvider::new(&entry.base_url))
-                    } else {
-                        Box::new(OpenAICompatProvider::new(
-                            &entry.base_url,
-                            entry.api_key.as_deref().unwrap_or(""),
-                            entry.display_name.as_deref().unwrap_or(id),
-                        ))
-                    };
-                    tracing::info!("注册 AI Provider: {}", id);
-                    ai_router.register(provider).await;
+            for (id, entry) in &config.models.providers {
+                if !entry.enabled {
+                    continue;
                 }
+                let provider: Box<dyn miaoclaw_lib::ai::AIProvider> = if id == "ollama" {
+                    Box::new(OllamaProvider::new(&entry.base_url))
+                } else {
+                    Box::new(OpenAICompatProvider::new(
+                        &entry.base_url,
+                        entry.api_key.as_deref().unwrap_or(""),
+                        entry.display_name.as_deref().unwrap_or(id),
+                    ))
+                };
+                tracing::info!("注册 AI Provider: {}", id);
+                ai_router.register(provider);
+            }
 
-                // 设置默认 provider
-                if let Some(primary) = &config.models.primary {
-                    if let Some(provider_id) = primary.split('/').next() {
-                        ai_router.set_default(provider_id).await;
-                    }
+            // 设置默认 provider
+            if let Some(primary) = &config.models.primary {
+                if let Some(provider_id) = primary.split('/').next() {
+                    ai_router.set_default(provider_id);
                 }
-            });
+            }
 
             // 4. 初始化 Channel Manager
             let channel_manager = ChannelManager::new();

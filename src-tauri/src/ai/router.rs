@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
+use tokio::sync::RwLock as TokioRwLock;
 
 use super::ollama::OllamaProvider;
 use super::openai_compat::OpenAICompatProvider;
@@ -8,14 +8,15 @@ use super::provider::*;
 
 /// AI 路由器 - 管理多个 Provider，路由请求
 pub struct AIRouter {
-    providers: Arc<RwLock<HashMap<String, Box<dyn AIProvider>>>>,
+    /// 用 tokio RwLock，因为 send() 需要跨 await 持有读锁
+    providers: Arc<TokioRwLock<HashMap<String, Box<dyn AIProvider>>>>,
     default_provider: Arc<RwLock<Option<String>>>,
 }
 
 impl AIRouter {
     pub fn new() -> Self {
         Self {
-            providers: Arc::new(RwLock::new(HashMap::new())),
+            providers: Arc::new(TokioRwLock::new(HashMap::new())),
             default_provider: Arc::new(RwLock::new(None)),
         }
     }
@@ -48,15 +49,15 @@ impl AIRouter {
         }
     }
 
-    /// 注册单个 Provider
-    pub async fn register(&self, provider: Box<dyn AIProvider>) {
+    /// 注册单个 Provider（同步，blocking_write 可在非 async 上下文调用）
+    pub fn register(&self, provider: Box<dyn AIProvider>) {
         let id = provider.id().to_string();
-        self.providers.write().await.insert(id, provider);
+        self.providers.blocking_write().insert(id, provider);
     }
 
     /// 设置默认 Provider
-    pub async fn set_default(&self, provider_id: &str) {
-        *self.default_provider.write().await = Some(provider_id.to_string());
+    pub fn set_default(&self, provider_id: &str) {
+        *self.default_provider.write().unwrap() = Some(provider_id.to_string());
     }
 
     /// 发送消息到指定或默认 Provider
@@ -66,22 +67,24 @@ impl AIRouter {
         options: &ModelOptions,
         provider_id: Option<&str>,
     ) -> Result<String, AIError> {
+        let id = {
+            let default = self.default_provider.read().unwrap();
+            provider_id
+                .map(|s| s.to_string())
+                .or_else(|| default.clone())
+                .ok_or_else(|| AIError::InvalidConfig("未配置任何 AI Provider".into()))?
+        };
+
         let providers = self.providers.read().await;
-        let default = self.default_provider.read().await;
-
-        let id = provider_id
-            .or(default.as_deref())
-            .ok_or_else(|| AIError::InvalidConfig("未配置任何 AI Provider".into()))?;
-
         let provider = providers
-            .get(id)
+            .get(&id)
             .ok_or_else(|| AIError::InvalidConfig(format!("Provider '{}' 不存在", id)))?;
 
         provider.send_message(messages, options).await
     }
 
     /// 列出所有已注册的 Provider
-    pub async fn list_providers(&self) -> Vec<String> {
-        self.providers.read().await.keys().cloned().collect()
+    pub fn list_providers(&self) -> Vec<String> {
+        self.providers.blocking_read().keys().cloned().collect()
     }
 }

@@ -111,8 +111,8 @@ pub async fn ai_send_message(
 }
 
 #[tauri::command]
-pub async fn ai_list_providers(router: State<'_, AIRouter>) -> CmdResult<Vec<String>> {
-    Ok(router.list_providers().await)
+pub fn ai_list_providers(router: State<'_, AIRouter>) -> CmdResult<Vec<String>> {
+    Ok(router.list_providers())
 }
 
 // ─── Channel Commands ───
