@@ -34,6 +34,8 @@ fn main() {
             config_validate_provider,
             codex_login,
             codex_is_logged_in,
+            codex_device_start,
+            codex_device_poll,
             ai_send_message,
             ai_list_providers,
             channel_list,

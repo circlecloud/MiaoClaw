@@ -14,12 +14,28 @@ const CALLBACK_PATH: &str = "/auth/callback";
 const SCOPE: &str = "openid profile email offline_access";
 const API_BASE: &str = "https://api.openai.com";
 
+/// Device Code Flow 端点
+const DEVICE_CODE_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/usercode";
+const DEVICE_TOKEN_URL: &str = "https://auth.openai.com/api/accounts/deviceauth/token";
+const DEVICE_REDIRECT_URI: &str = "https://auth.openai.com/deviceauth/callback";
+const DEVICE_VERIFY_URL: &str = "https://auth.openai.com/codex/device";
+const DEVICE_TIMEOUT_SECS: u64 = 900; // 15 分钟
+
 /// Codex OAuth Token
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CodexToken {
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub expires_at: Option<u64>,
+}
+
+/// Device Code Flow 响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceCodeResponse {
+    pub device_auth_id: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub interval: u64,
 }
 
 /// Codex Provider - 通过 ChatGPT Plus/Pro 订阅的 OAuth 授权使用 OpenAI 模型
@@ -151,6 +167,115 @@ impl CodexProvider {
 
         // 用 code 换 token (同步)
         let token = self.exchange_code_blocking(&code, &verifier, &redirect_uri)?;
+        self.set_token(token.clone());
+        Ok(token)
+    }
+
+    /// Device Code Flow: 请求设备码
+    pub fn start_device_code_login(&self) -> Result<DeviceCodeResponse, AIError> {
+        let body = serde_json::json!({ "client_id": CLIENT_ID });
+
+        let resp = reqwest::blocking::Client::new()
+            .post(DEVICE_CODE_URL)
+            .json(&body)
+            .send()
+            .map_err(|e| AIError::Network(e.into()))?;
+
+        if !resp.status().is_success() {
+            let text = resp.text().unwrap_or_default();
+            return Err(AIError::ApiError(format!("请求设备码失败: {}", text)));
+        }
+
+        let data: serde_json::Value = resp.json()
+            .map_err(|e| AIError::Network(e.into()))?;
+
+        Ok(DeviceCodeResponse {
+            device_auth_id: data["device_auth_id"].as_str().unwrap_or("").to_string(),
+            user_code: data["user_code"].as_str()
+                .or(data["usercode"].as_str())
+                .unwrap_or("").to_string(),
+            verification_uri: DEVICE_VERIFY_URL.to_string(),
+            interval: data["interval"].as_u64()
+                .or(data["interval"].as_str().and_then(|s| s.parse().ok()))
+                .unwrap_or(5),
+        })
+    }
+
+    /// Device Code Flow: 轮询等待用户授权并换取 token
+    pub fn poll_device_code(&self, device_auth_id: &str, user_code: &str, interval: u64) -> Result<CodexToken, AIError> {
+        let client = reqwest::blocking::Client::new();
+        let start = std::time::Instant::now();
+
+        loop {
+            if start.elapsed().as_secs() > DEVICE_TIMEOUT_SECS {
+                return Err(AIError::ApiError("设备码授权超时（15分钟）".into()));
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(interval));
+
+            let resp = client
+                .post(DEVICE_TOKEN_URL)
+                .json(&serde_json::json!({
+                    "device_auth_id": device_auth_id,
+                    "user_code": user_code,
+                }))
+                .send()
+                .map_err(|e| AIError::Network(e.into()))?;
+
+            let status = resp.status();
+            if status.is_success() {
+                let data: serde_json::Value = resp.json()
+                    .map_err(|e| AIError::Network(e.into()))?;
+
+                let auth_code = data["authorization_code"].as_str()
+                    .ok_or_else(|| AIError::ApiError("响应中无 authorization_code".into()))?;
+                let code_verifier = data["code_verifier"].as_str()
+                    .ok_or_else(|| AIError::ApiError("响应中无 code_verifier".into()))?;
+
+                // 用 authorization_code 换 access_token
+                return self.exchange_device_token(auth_code, code_verifier);
+            }
+
+            // 403/404 = 用户尚未授权，继续轮询
+            if status.as_u16() == 403 || status.as_u16() == 404 {
+                tracing::debug!("设备码授权等待中...");
+                continue;
+            }
+
+            let text = resp.text().unwrap_or_default();
+            return Err(AIError::ApiError(format!("轮询失败 ({}): {}", status, text)));
+        }
+    }
+
+    fn exchange_device_token(&self, code: &str, verifier: &str) -> Result<CodexToken, AIError> {
+        let body = format!(
+            "grant_type=authorization_code&client_id={}&code={}&code_verifier={}&redirect_uri={}",
+            CLIENT_ID,
+            urlencoding::encode(code),
+            urlencoding::encode(verifier),
+            urlencoding::encode(DEVICE_REDIRECT_URI),
+        );
+
+        let resp = reqwest::blocking::Client::new()
+            .post(TOKEN_URL)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .map_err(|e| AIError::Network(e.into()))?;
+
+        let data: serde_json::Value = resp.json()
+            .map_err(|e| AIError::Network(e.into()))?;
+
+        let access_token = data["access_token"].as_str()
+            .ok_or_else(|| AIError::ApiError("token 响应中无 access_token".into()))?
+            .to_string();
+
+        let refresh_token = data["refresh_token"].as_str().map(|s| s.to_string());
+        let expires_in = data["expires_in"].as_u64().unwrap_or(3600);
+        let expires_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + expires_in;
+
+        let token = CodexToken { access_token, refresh_token, expires_at: Some(expires_at) };
         self.set_token(token.clone());
         Ok(token)
     }

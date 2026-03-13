@@ -19,4 +19,14 @@ export const aiAPI = {
 export const codexAPI = {
   login: () => invoke<{ success: boolean; expires_at?: number }>("codex_login"),
   isLoggedIn: () => invoke<boolean>("codex_is_logged_in"),
+  deviceStart: () => invoke<{
+    device_auth_id: string;
+    user_code: string;
+    verification_uri: string;
+    interval: number;
+  }>("codex_device_start"),
+  devicePoll: (deviceAuthId: string, userCode: string, interval: number) =>
+    invoke<{ success: boolean; expires_at?: number }>("codex_device_poll", {
+      deviceAuthId, userCode, interval,
+    }),
 };

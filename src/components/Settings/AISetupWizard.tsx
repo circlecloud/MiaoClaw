@@ -58,6 +58,13 @@ export function AISetupWizard() {
   const [formData, setFormData] = useState({ baseUrl: "", apiKey: "", model: "" });
   const [oauthLoading, setOauthLoading] = useState(false);
   const [oauthError, setOauthError] = useState("");
+  const [deviceCode, setDeviceCode] = useState<{
+    device_auth_id: string;
+    user_code: string;
+    verification_uri: string;
+    interval: number;
+  } | null>(null);
+  const [devicePolling, setDevicePolling] = useState(false);
 
   const handleSelectPreset = (index: number) => {
     setSelectedPreset(index);
@@ -83,6 +90,45 @@ export function AISetupWizard() {
       setOauthError(String(e));
     } finally {
       setOauthLoading(false);
+    }
+  };
+
+  const handleDeviceCodeStart = async () => {
+    setOauthLoading(true);
+    setOauthError("");
+    setDeviceCode(null);
+    try {
+      const resp = await codexAPI.deviceStart();
+      setDeviceCode(resp);
+    } catch (e) {
+      setOauthError(String(e));
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
+  const handleDeviceCodePoll = async () => {
+    if (!deviceCode) return;
+    setDevicePolling(true);
+    setOauthError("");
+    try {
+      const result = await codexAPI.devicePoll(
+        deviceCode.device_auth_id,
+        deviceCode.user_code,
+        deviceCode.interval,
+      );
+      if (result.success) {
+        addProvider("codex", {
+          baseUrl: "https://api.openai.com",
+          enabled: true,
+          displayName: "Codex (ChatGPT 订阅)",
+        });
+        setFirstRun(false);
+      }
+    } catch (e) {
+      setOauthError(String(e));
+    } finally {
+      setDevicePolling(false);
     }
   };
 
@@ -140,7 +186,7 @@ export function AISetupWizard() {
         <div className="space-y-4">
           <button
             onClick={handleCodexLogin}
-            disabled={oauthLoading}
+            disabled={oauthLoading || devicePolling}
             className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {oauthLoading ? (
@@ -149,9 +195,59 @@ export function AISetupWizard() {
                 等待浏览器授权...
               </>
             ) : (
-              "🔐 使用 ChatGPT 账号登录"
+              "🔐 浏览器授权登录"
             )}
           </button>
+
+          <div className="relative flex items-center my-2">
+            <div className="flex-grow border-t border-gray-300" />
+            <span className="mx-3 text-xs text-gray-400">或</span>
+            <div className="flex-grow border-t border-gray-300" />
+          </div>
+
+          {!deviceCode ? (
+            <button
+              onClick={handleDeviceCodeStart}
+              disabled={oauthLoading || devicePolling}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              📱 设备码授权（适用于远程/无浏览器环境）
+            </button>
+          ) : (
+            <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-3">
+              <p className="text-sm text-gray-700">
+                1. 在任意设备上访问：
+              </p>
+              <a
+                href={deviceCode.verification_uri}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-center text-blue-600 font-mono text-sm underline"
+              >
+                {deviceCode.verification_uri}
+              </a>
+              <p className="text-sm text-gray-700">2. 输入以下代码：</p>
+              <div className="text-center">
+                <span className="inline-block bg-white border-2 border-blue-400 rounded-lg px-6 py-3 font-mono text-2xl font-bold tracking-widest select-all">
+                  {deviceCode.user_code}
+                </span>
+              </div>
+              {!devicePolling ? (
+                <button
+                  onClick={handleDeviceCodePoll}
+                  className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  ✅ 我已输入代码，开始验证
+                </button>
+              ) : (
+                <div className="flex items-center justify-center gap-2 py-2 text-sm text-blue-600">
+                  <span className="animate-spin">⏳</span>
+                  等待授权中...
+                </div>
+              )}
+            </div>
+          )}
+
           {oauthError && (
             <p className="text-red-500 text-sm">{oauthError}</p>
           )}

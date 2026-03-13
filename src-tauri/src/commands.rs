@@ -117,6 +117,41 @@ pub fn codex_is_logged_in(router: State<'_, AIRouter>) -> bool {
     router.has_provider("codex")
 }
 
+#[tauri::command]
+pub fn codex_device_start() -> CmdResult<serde_json::Value> {
+    let provider = crate::ai::codex::CodexProvider::new();
+    let resp = provider.start_device_code_login().map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "device_auth_id": resp.device_auth_id,
+        "user_code": resp.user_code,
+        "verification_uri": resp.verification_uri,
+        "interval": resp.interval,
+    }))
+}
+
+#[tauri::command]
+pub fn codex_device_poll(
+    router: State<'_, AIRouter>,
+    device_auth_id: String,
+    user_code: String,
+    interval: u64,
+) -> CmdResult<serde_json::Value> {
+    let provider = crate::ai::codex::CodexProvider::new();
+    let token = provider
+        .poll_device_code(&device_auth_id, &user_code, interval)
+        .map_err(|e| e.to_string())?;
+
+    // 注册到 router
+    let codex = crate::ai::codex::CodexProvider::with_token(token.clone());
+    router.register(Box::new(codex));
+
+    Ok(serde_json::json!({
+        "success": true,
+        "expires_at": token.expires_at,
+    }))
+}
+
 // ─── AI Commands ───
 
 #[tauri::command]
