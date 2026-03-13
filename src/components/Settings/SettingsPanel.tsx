@@ -1,4 +1,5 @@
 import { useSettingsStore } from "../../stores/settingsStore";
+import { emit } from "@tauri-apps/api/event";
 import type { PetStyle } from "../../types";
 
 const PET_STYLES: { value: PetStyle; label: string; icon: string }[] = [
@@ -23,7 +24,10 @@ export function SettingsPanel() {
           {PET_STYLES.map((style) => (
             <button
               key={style.value}
-              onClick={() => updatePet({ style: style.value })}
+              onClick={() => {
+                updatePet({ style: style.value });
+                emit("pet-style-changed", { style: style.value });
+              }}
               className={`p-3 border rounded-lg text-center transition-colors ${
                 config.pet.style === style.value
                   ? "border-blue-500 bg-blue-50"
