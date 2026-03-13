@@ -11,7 +11,8 @@ const AUTH_URL: &str = "https://auth.openai.com/authorize";
 const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CLIENT_ID: &str = "DJvkhBIkFdITpUCLNXbfn";
 const AUDIENCE: &str = "https://api.openai.com/v1";
-const REDIRECT_PORT: u16 = 18457;
+const REDIRECT_PORT: u16 = 1455;
+const CALLBACK_PATH: &str = "/auth/callback";
 const SCOPE: &str = "openid profile email offline_access";
 const API_BASE: &str = "https://api.openai.com";
 
@@ -82,7 +83,7 @@ impl CodexProvider {
             hex::encode(&buf)
         };
 
-        let redirect_uri = format!("http://localhost:{}/callback", REDIRECT_PORT);
+        let redirect_uri = format!("http://localhost:{}{}", REDIRECT_PORT, CALLBACK_PATH);
 
         let auth_url = format!(
             "{}?client_id={}&redirect_uri={}&response_type=code&scope={}&audience={}&code_challenge={}&code_challenge_method=S256&state={}",
@@ -103,24 +104,39 @@ impl CodexProvider {
             format!("127.0.0.1:{}", REDIRECT_PORT)
         ).map_err(|e| AIError::ApiError(format!("无法启动回调服务器: {}", e)))?;
 
-        tracing::info!("等待 Codex OAuth 回调...");
+        tracing::info!("等待 Codex OAuth 回调 (port {})...", REDIRECT_PORT);
 
-        let request = server
-            .recv()
-            .map_err(|e| AIError::ApiError(format!("等待回调失败: {}", e)))?;
+        // 循环接收请求，直到收到 /auth/callback
+        let callback_url;
+        loop {
+            let request = server
+                .recv()
+                .map_err(|e| AIError::ApiError(format!("等待回调失败: {}", e)))?;
 
-        let url = request.url().to_string();
-        let response = tiny_http::Response::from_string(
-            "<html><body><h2>授权成功！你可以关闭此页面。</h2></body></html>"
-        ).with_header(
-            "Content-Type: text/html; charset=utf-8"
-                .parse::<tiny_http::Header>()
-                .unwrap(),
-        );
-        let _ = request.respond(response);
+            let url = request.url().to_string();
+            tracing::debug!("收到请求: {}", url);
+
+            if url.starts_with(CALLBACK_PATH) {
+                let response = tiny_http::Response::from_string(
+                    "<html><body><h2>✅ 授权成功！你可以关闭此页面。</h2></body></html>"
+                ).with_header(
+                    "Content-Type: text/html; charset=utf-8"
+                        .parse::<tiny_http::Header>()
+                        .unwrap(),
+                );
+                let _ = request.respond(response);
+                callback_url = url;
+                break;
+            } else {
+                // 非回调请求（favicon 等），返回 404
+                let response = tiny_http::Response::from_string("Not Found")
+                    .with_status_code(404);
+                let _ = request.respond(response);
+            }
+        }
 
         // 解析 code
-        let code = url
+        let code = callback_url
             .split('?')
             .nth(1)
             .and_then(|q| {
