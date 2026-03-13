@@ -177,6 +177,7 @@ fn main() {
             let plugin_engine = PluginEngine::new(plugin_dirs);
 
             // 6. 注册到 Tauri state
+            let is_first_run = config_manager.is_first_run();
             app.manage(config_manager);
             app.manage(ai_router);
             app.manage(channel_manager);
@@ -224,6 +225,15 @@ fn main() {
                         width: size.width,
                         height: size.height,
                     }));
+                }
+            }
+
+            // ─── 首次运行：自动打开设置页面 ───
+            if is_first_run {
+                tracing::info!("首次运行，打开设置页面");
+                if let Some(w) = app.get_webview_window("settings") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
                 }
             }
 
