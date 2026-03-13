@@ -6,10 +6,6 @@ import { parseSMD, buildSkinnedMesh, buildAnimationClip } from "../../lib/smdPar
 
 const MODEL_BASE = "/pets/smd/lp8";
 
-/**
- * SMD 模型渲染器
- * 使用 Three.js 渲染 Source Engine SMD 格式模型
- */
 export function SMDRenderer({ animation, width, height }: PetRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{
@@ -22,34 +18,39 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
     frameId?: number;
   }>({ clips: new Map() });
 
-  // 初始化场景
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      preserveDrawingBuffer: true,
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setClearColor(0x000000, 0);
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 10000);
     camera.position.set(0, 3, 8);
     camera.lookAt(0, 2, 0);
 
-    // 光照
-    scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+    scene.add(new THREE.AmbientLight(0xffffff, 2.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
 
     const state = stateRef.current;
     state.renderer = renderer;
     state.scene = scene;
     state.camera = camera;
 
-    // 加载模型
-    loadModel(state, scene).catch(console.error);
+    loadModel(state, scene, camera).catch((err) => {
+      console.error("SMD 模型加载失败:", err);
+    });
 
-    // 渲染循环
     const clock = new THREE.Clock();
     const animate = () => {
       state.frameId = requestAnimationFrame(animate);
@@ -62,11 +63,12 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
     return () => {
       if (state.frameId) cancelAnimationFrame(state.frameId);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     };
   }, [width, height]);
 
-  // 切换动画
   useEffect(() => {
     const state = stateRef.current;
     if (!state.mixer) return;
@@ -90,61 +92,90 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
 function mapAnimation(anim: PetAnimation): string {
   switch (anim) {
     case "walk": return "walk";
-    case "idle":
     default: return "idle";
   }
 }
 
 async function loadModel(
-  state: NonNullable<typeof SMDRenderer extends (...args: unknown[]) => unknown ? never : {
-    renderer?: THREE.WebGLRenderer;
-    scene?: THREE.Scene;
-    camera?: THREE.PerspectiveCamera;
+  state: {
     mixer?: THREE.AnimationMixer;
     clips: Map<string, THREE.AnimationClip>;
     currentAction?: THREE.AnimationAction;
-    frameId?: number;
-  }>,
+  },
   scene: THREE.Scene,
+  camera: THREE.PerspectiveCamera,
 ) {
-  // 加载 PQC 配置
+  console.log("[SMD] 开始加载模型...");
+
   const pqcResp = await fetch(`${MODEL_BASE}/8.pqc`);
+  if (!pqcResp.ok) {
+    throw new Error(`PQC 加载失败: ${pqcResp.status}`);
+  }
   const pqcText = await pqcResp.text();
   const config = parsePQC(pqcText);
+  console.log("[SMD] PQC 配置:", config);
 
-  // 加载参考模型 (body)
   const bodyResp = await fetch(`${MODEL_BASE}/${config.body}`);
+  if (!bodyResp.ok) {
+    throw new Error(`Body SMD 加载失败: ${bodyResp.status}`);
+  }
   const bodyText = await bodyResp.text();
   const bodySMD = parseSMD(bodyText);
+  console.log("[SMD] Body 解析完成:", bodySMD.triangles.length, "个三角形,", bodySMD.bones.length, "个骨骼");
 
-  // 加载贴图
   const texture = await new THREE.TextureLoader().loadAsync(
     `${MODEL_BASE}/cresselia-lp.png`,
   );
   texture.colorSpace = THREE.SRGBColorSpace;
+  console.log("[SMD] 贴图加载完成");
 
-  // 构建 SkinnedMesh
   const { mesh } = buildSkinnedMesh(bodySMD, texture, config.scale);
   scene.add(mesh);
 
-  // 动画混合器
+  // 自动适配相机：计算模型包围盒
+  const box = new THREE.Box3().setFromObject(mesh);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+
+  console.log("[SMD] 模型包围盒 center:", center, "size:", size, "maxDim:", maxDim);
+
+  // 相机对准模型中心，距离根据模型大小调整
+  const fov = camera.fov * (Math.PI / 180);
+  const dist = maxDim / (2 * Math.tan(fov / 2)) * 1.2;
+  camera.position.set(center.x, center.y, center.z + dist);
+  camera.lookAt(center);
+  camera.near = dist / 100;
+  camera.far = dist * 100;
+  camera.updateProjectionMatrix();
+
+  console.log("[SMD] 相机位置:", camera.position, "距离:", dist);
+
+  // 动画
   const mixer = new THREE.AnimationMixer(mesh);
   state.mixer = mixer;
 
-  // 加载动画
   for (const [name, file] of Object.entries(config.anims)) {
-    const resp = await fetch(`${MODEL_BASE}/${file}`);
-    const text = await resp.text();
-    const animSMD = parseSMD(text);
-    const clip = buildAnimationClip(name, animSMD, bodySMD.bones, config.scale);
-    state.clips.set(name, clip);
+    try {
+      const resp = await fetch(`${MODEL_BASE}/${file}`);
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      const animSMD = parseSMD(text);
+      const clip = buildAnimationClip(name, animSMD, bodySMD.bones, config.scale);
+      state.clips.set(name, clip);
+      console.log("[SMD] 动画加载:", name, clip.duration.toFixed(2) + "s");
+    } catch (err) {
+      console.warn("[SMD] 动画加载失败:", name, err);
+    }
   }
 
-  // 播放 idle
   const idleClip = state.clips.get("idle");
   if (idleClip) {
     const action = mixer.clipAction(idleClip);
     action.play();
     state.currentAction = action;
+    console.log("[SMD] 播放 idle 动画");
   }
+
+  console.log("[SMD] 模型加载完成");
 }
