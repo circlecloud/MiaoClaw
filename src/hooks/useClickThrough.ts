@@ -3,9 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 
 /**
  * 让窗口透明像素区域点击穿透。
- * 
- * 原理：每 50ms 用 canvas 截取鼠标位置的像素，
- * 检测 alpha 值，alpha=0 则穿透，否则可交互。
+ *
+ * 原理：每 50ms 检测鼠标位置下方的像素是否透明。
+ * - 找到容器内的 canvas/img 元素，读取该坐标的像素 alpha
+ * - alpha > 0 → 关闭穿透（可拖拽）
+ * - alpha = 0 → 开启穿透（点击到桌面）
  */
 export function useClickThrough(containerRef: React.RefObject<HTMLElement | null>) {
   const ignoring = useRef(false);
@@ -16,11 +18,15 @@ export function useClickThrough(containerRef: React.RefObject<HTMLElement | null
       lastPos.current = { x: e.clientX, y: e.clientY };
     };
 
-    const checkPixel = async () => {
+    const interval = setInterval(async () => {
       const { x, y } = lastPos.current;
       if (x < 0 || y < 0) return;
 
-      const isTransparent = getPixelAlpha(x, y) === 0;
+      const container = containerRef.current;
+      if (!container) return;
+
+      const alpha = getAlphaAtPoint(container, x, y);
+      const isTransparent = alpha === 0;
 
       if (isTransparent && !ignoring.current) {
         ignoring.current = true;
@@ -29,9 +35,8 @@ export function useClickThrough(containerRef: React.RefObject<HTMLElement | null
         ignoring.current = false;
         await invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
       }
-    };
+    }, 50);
 
-    const interval = setInterval(checkPixel, 50);
     document.addEventListener("mousemove", onMouseMove);
 
     return () => {
@@ -43,69 +48,84 @@ export function useClickThrough(containerRef: React.RefObject<HTMLElement | null
 }
 
 /**
- * 获取屏幕坐标 (x, y) 处的像素 alpha 值。
- * 使用 html2canvas 的思路：遍历该坐标下所有元素，
- * 检查是否有可见的非透明内容。
+ * 获取容器内指定坐标的像素 alpha 值
  */
-function getPixelAlpha(x: number, y: number): number {
-  // 获取该坐标下的所有元素
-  const elements = document.elementsFromPoint(x, y);
+function getAlphaAtPoint(container: HTMLElement, x: number, y: number): number {
+  // 1. 尝试从 canvas 读取（Three.js / PixiJS 渲染器）
+  const canvas = container.querySelector("canvas");
+  if (canvas) {
+    return getCanvasAlpha(canvas, x, y);
+  }
 
-  for (const el of elements) {
-    // 跳过容器/body/html/root
-    if (
-      el === document.body ||
-      el === document.documentElement ||
-      el.id === "root"
-    ) {
-      continue;
+  // 2. 尝试从 img 读取
+  const img = container.querySelector("img");
+  if (img) {
+    return getImageAlpha(img, x, y);
+  }
+
+  // 3. 回退：检查 elementFromPoint
+  const el = document.elementFromPoint(x, y);
+  if (!el || el === container || el === document.body || el === document.documentElement) {
+    return 0;
+  }
+
+  // 有文字内容
+  for (const child of el.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
+      return 255;
     }
+  }
 
-    // 检查元素是否有可见背景
-    const style = window.getComputedStyle(el);
-    const bg = style.backgroundColor;
-    const bgImage = style.backgroundImage;
-    const opacity = parseFloat(style.opacity);
-
-    if (opacity === 0) continue;
-
-    // 有背景图片
-    if (bgImage && bgImage !== "none") return 255;
-
-    // 有非透明背景色
-    if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") return 255;
-
-    // 是 img/canvas/svg/video 元素
-    const tag = el.tagName.toLowerCase();
-    if (tag === "img" || tag === "svg" || tag === "video") {
-      return getImageAlphaAt(el as HTMLElement, x, y);
-    }
-    if (tag === "canvas") {
-      return getCanvasAlphaAt(el as HTMLCanvasElement, x, y);
-    }
-
-    // 有文字内容（emoji 等）
-    if (el.childNodes.length > 0) {
-      for (const child of el.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
-          return 255;
-        }
-      }
-    }
-
-    // span/div 有 role="img"（emoji 渲染）
-    if (el.getAttribute("role") === "img") return 255;
+  const style = window.getComputedStyle(el);
+  if (style.backgroundColor && style.backgroundColor !== "transparent" && style.backgroundColor !== "rgba(0, 0, 0, 0)") {
+    return 255;
   }
 
   return 0;
 }
 
-/**
- * 对 img/svg 元素，绘制到临时 canvas 检测像素 alpha
- */
-function getImageAlphaAt(el: HTMLElement, x: number, y: number): number {
+function getCanvasAlpha(canvas: HTMLCanvasElement, x: number, y: number): number {
   try {
-    const rect = el.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
+    const localX = x - rect.left;
+    const localY = y - rect.top;
+
+    if (localX < 0 || localY < 0 || localX >= rect.width || localY >= rect.height) {
+      return 0;
+    }
+
+    // Three.js 用 WebGL context
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    if (gl) {
+      const pixelX = Math.floor(localX * (canvas.width / rect.width));
+      const pixelY = canvas.height - Math.floor(localY * (canvas.height / rect.height)) - 1; // WebGL Y 翻转
+      const pixel = new Uint8Array(4);
+      gl.readPixels(pixelX, pixelY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      return pixel[3];
+    }
+
+    // 2D context fallback
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const pixel = ctx.getImageData(
+        Math.floor(localX * scaleX),
+        Math.floor(localY * scaleY),
+        1, 1
+      ).data;
+      return pixel[3];
+    }
+
+    return 255;
+  } catch {
+    return 255;
+  }
+}
+
+function getImageAlpha(img: HTMLImageElement, x: number, y: number): number {
+  try {
+    const rect = img.getBoundingClientRect();
     const localX = x - rect.left;
     const localY = y - rect.top;
 
@@ -114,40 +134,19 @@ function getImageAlphaAt(el: HTMLElement, x: number, y: number): number {
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    canvas.width = img.naturalWidth || rect.width;
+    canvas.height = img.naturalHeight || rect.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return 255;
 
-    if (el instanceof HTMLImageElement) {
-      ctx.drawImage(el, 0, 0, rect.width, rect.height);
-    } else {
-      // SVG 等无法直接 drawImage，视为不透明
-      return 255;
-    }
-
-    const pixel = ctx.getImageData(Math.floor(localX), Math.floor(localY), 1, 1).data;
-    return pixel[3]; // alpha
-  } catch {
-    return 255; // 跨域等错误，视为不透明
-  }
-}
-
-/**
- * 对 canvas 元素直接读取像素
- */
-function getCanvasAlphaAt(canvas: HTMLCanvasElement, x: number, y: number): number {
-  try {
-    const rect = canvas.getBoundingClientRect();
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const localX = Math.floor((x - rect.left) * scaleX);
-    const localY = Math.floor((y - rect.top) * scaleY);
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return 255;
-
-    const pixel = ctx.getImageData(localX, localY, 1, 1).data;
+    const pixel = ctx.getImageData(
+      Math.floor(localX * scaleX),
+      Math.floor(localY * scaleY),
+      1, 1
+    ).data;
     return pixel[3];
   } catch {
     return 255;
