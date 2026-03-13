@@ -213,20 +213,27 @@ fn main() {
             // macOS
             #[cfg(target_os = "macos")]
             {
-                #[allow(deprecated)]
                 if let Some(window) = app.get_webview_window("pet") {
-                    use cocoa::appkit::{NSColor, NSWindow};
-                    use cocoa::base::{id, nil, NO};
+                    use tauri::window::Color;
+                    let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
+                    let _ = window.set_shadow(false);
 
-                    let ns_window = window.ns_window().unwrap() as id;
-                    unsafe {
-                        let clear = NSColor::clearColor(nil);
-                        ns_window.setBackgroundColor_(clear);
-                        ns_window.setOpaque_(NO);
-                        ns_window.setHasShadow_(NO);
+                    // 尝试设置 WKWebView 透明
+                    #[allow(deprecated)]
+                    {
+                        use cocoa::appkit::{NSColor, NSWindow};
+                        use cocoa::base::{id, nil, NO};
 
-                        let content_view: id = ns_window.contentView();
-                        set_webview_transparent(content_view);
+                        let ns_window = window.ns_window().unwrap() as id;
+                        unsafe {
+                            let clear = NSColor::clearColor(nil);
+                            ns_window.setBackgroundColor_(clear);
+                            ns_window.setOpaque_(NO);
+                            ns_window.setHasShadow_(NO);
+
+                            let content_view: id = ns_window.contentView();
+                            set_webview_transparent(content_view);
+                        }
                     }
                 }
             }

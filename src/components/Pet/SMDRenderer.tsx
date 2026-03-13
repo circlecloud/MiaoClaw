@@ -1,13 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { PetRendererProps, PetAnimation } from "../../types";
 import { parsePQC } from "../../lib/pqcParser";
 import { parseSMD, buildSkinnedMesh, buildAnimationClip } from "../../lib/smdParser";
+import { CSSRenderer } from "./CSSRenderer";
 
 const MODEL_BASE = "/pets/smd/lp8";
 
-export function SMDRenderer({ animation, width, height }: PetRendererProps) {
+export function SMDRenderer(props: PetRendererProps) {
+  const { animation, width, height } = props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [loadError, setLoadError] = useState(false);
   const stateRef = useRef<{
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
@@ -53,6 +56,7 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
 
     loadModel(state, scene, camera).catch((err) => {
       console.error("SMD 模型加载失败:", err);
+      setLoadError(true);
     });
 
     // Ctrl+拖拽旋转视角
@@ -118,6 +122,10 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
       state.currentAction = newAction;
     }
   }, [animation]);
+
+  if (loadError) {
+    return <CSSRenderer {...props} />;
+  }
 
   return <div ref={containerRef} style={{ width, height }} />;
 }
