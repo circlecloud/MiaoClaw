@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri::tray::TrayIconBuilder;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 use miaoclaw_lib::ai::AIRouter;
 use miaoclaw_lib::ai::ollama::OllamaProvider;
@@ -38,8 +40,78 @@ fn main() {
             plugin_call_tool,
             pet_get_state,
         ])
+        .on_window_event(|window, event| {
+            // 点击关闭按钮时隐藏窗口而不是退出
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if label == "pet" || label == "chat" || label == "settings" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             tracing::info!("MiaoClaw 启动中...");
+
+            // ─── 系统托盘 ───
+            let show_pet = MenuItemBuilder::with_id("show_pet", "显示宠物").build(app)?;
+            let show_chat = MenuItemBuilder::with_id("show_chat", "打开对话").build(app)?;
+            let show_settings = MenuItemBuilder::with_id("show_settings", "设置").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&show_pet)
+                .item(&show_chat)
+                .separator()
+                .item(&show_settings)
+                .separator()
+                .item(&quit)
+                .build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("MiaoClaw - 你的桌面宠物助理")
+                .menu(&menu)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show_pet" => {
+                            if let Some(w) = app.get_webview_window("pet") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "show_chat" => {
+                            if let Some(w) = app.get_webview_window("chat") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "show_settings" => {
+                            if let Some(w) = app.get_webview_window("settings") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { button, .. } = event {
+                        if button == tauri::tray::MouseButton::Left {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("pet") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // ─── 配置初始化 ───
 
             // 1. 确定数据目录
             let data_dir = app
@@ -83,7 +155,6 @@ fn main() {
                 ai_router.register(provider);
             }
 
-            // 设置默认 provider
             if let Some(primary) = &config.models.primary {
                 if let Some(provider_id) = primary.split('/').next() {
                     ai_router.set_default(provider_id);
@@ -92,7 +163,6 @@ fn main() {
 
             // 4. 初始化 Channel Manager
             let channel_manager = ChannelManager::new();
-            // TODO: 根据 config.channels 注册各 channel adapter
 
             // 5. 初始化插件引擎
             let mut plugin_dirs: Vec<PathBuf> = vec![data_dir.join("plugins")];
@@ -107,7 +177,7 @@ fn main() {
             app.manage(channel_manager);
             app.manage(plugin_engine);
 
-            // 7. 平台特定：设置窗口 + WebView 背景透明
+            // ─── 平台特定：透明窗口 ───
 
             // macOS
             #[cfg(target_os = "macos")]
@@ -119,7 +189,6 @@ fn main() {
                     use objc::{msg_send, sel, sel_impl};
 
                     let ns_window = window.ns_window().unwrap() as id;
-
                     unsafe {
                         let clear = NSColor::clearColor(nil);
                         ns_window.setBackgroundColor_(clear);
@@ -127,14 +196,13 @@ fn main() {
                         ns_window.setHasShadow_(NO);
 
                         let ns_view = window.ns_view().unwrap() as id;
-                        let key = NSString::alloc(nil)
-                            .init_str("drawsBackground");
+                        let key = NSString::alloc(nil).init_str("drawsBackground");
                         let _: () = msg_send![ns_view, setValue: NO forKey: key];
                     }
                 }
             }
 
-            // Windows: 去掉残留边框 + 触发 resize 刷新透明
+            // Windows
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.get_webview_window("pet") {
@@ -142,7 +210,6 @@ fn main() {
                     let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
                     let _ = window.set_shadow(false);
 
-                    // 触发 resize 刷新，解决 Windows 透明窗口初始白背景问题
                     let size = window.outer_size().unwrap();
                     let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
                         width: size.width + 1,

@@ -48,11 +48,6 @@
         "url": "index.html#/settings"
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "tooltip": "MiaoClaw - 你的桌面宠物助理"
-    },
     "security": {
       "csp": null
     }
