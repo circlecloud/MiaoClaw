@@ -7,6 +7,7 @@ use super::openai_compat::OpenAICompatProvider;
 use super::provider::*;
 
 /// AI 路由器 - 管理多个 Provider，路由请求
+#[derive(Clone)]
 pub struct AIRouter {
     /// 用 tokio RwLock，因为 send() 需要跨 await 持有读锁
     providers: Arc<TokioRwLock<HashMap<String, Box<dyn AIProvider>>>>,
