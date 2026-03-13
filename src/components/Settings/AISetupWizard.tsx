@@ -1,14 +1,25 @@
 import { useState } from "react";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { codexAPI } from "../../hooks/useAPI";
 import type { ProviderEntry } from "../../types";
 
 const PROVIDER_PRESETS = [
+  {
+    id: "codex",
+    name: "Codex (ChatGPT 订阅)",
+    description: "使用 ChatGPT Plus/Pro 订阅授权，无需 API Key",
+    defaultUrl: "",
+    needsKey: false,
+    isOAuth: true,
+    guide: "点击下方按钮，在浏览器中登录你的 ChatGPT 账号完成授权。\n支持 ChatGPT Plus / Pro / Team 订阅。",
+  },
   {
     id: "ollama",
     name: "Ollama (本地)",
     description: "在本地运行 AI 模型，隐私优先，无需 API Key",
     defaultUrl: "http://localhost:11434",
     needsKey: false,
+    isOAuth: false,
     guide: "1. 安装 Ollama: https://ollama.ai\n2. 运行: ollama pull llama3.2\n3. 确保 Ollama 服务已启动",
   },
   {
@@ -17,6 +28,7 @@ const PROVIDER_PRESETS = [
     description: "使用 OpenAI GPT 系列模型",
     defaultUrl: "https://api.openai.com",
     needsKey: true,
+    isOAuth: false,
     guide: "1. 访问 https://platform.openai.com/api-keys\n2. 创建 API Key\n3. 推荐模型: gpt-4o-mini",
   },
   {
@@ -25,6 +37,7 @@ const PROVIDER_PRESETS = [
     description: "使用 Anthropic Claude 系列模型",
     defaultUrl: "https://api.anthropic.com",
     needsKey: true,
+    isOAuth: false,
     guide: "1. 访问 https://console.anthropic.com\n2. 创建 API Key\n3. 推荐模型: claude-sonnet-4-20250514",
   },
   {
@@ -33,6 +46,7 @@ const PROVIDER_PRESETS = [
     description: "LM Studio / vLLM / text-generation-webui 等",
     defaultUrl: "http://localhost:1234",
     needsKey: false,
+    isOAuth: false,
     guide: "填入你的 OpenAI 兼容 API 地址即可",
   },
 ];
@@ -42,11 +56,34 @@ export function AISetupWizard() {
   const [step, setStep] = useState(0);
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [formData, setFormData] = useState({ baseUrl: "", apiKey: "", model: "" });
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthError, setOauthError] = useState("");
 
   const handleSelectPreset = (index: number) => {
     setSelectedPreset(index);
     setFormData({ baseUrl: PROVIDER_PRESETS[index].defaultUrl, apiKey: "", model: "" });
+    setOauthError("");
     setStep(1);
+  };
+
+  const handleCodexLogin = async () => {
+    setOauthLoading(true);
+    setOauthError("");
+    try {
+      const result = await codexAPI.login();
+      if (result.success) {
+        addProvider("codex", {
+          baseUrl: "https://api.openai.com",
+          enabled: true,
+          displayName: "Codex (ChatGPT 订阅)",
+        });
+        setFirstRun(false);
+      }
+    } catch (e) {
+      setOauthError(String(e));
+    } finally {
+      setOauthLoading(false);
+    }
   };
 
   const handleSave = () => {
@@ -98,44 +135,67 @@ export function AISetupWizard() {
       <pre className="text-xs bg-gray-100 p-3 rounded mb-4 whitespace-pre-wrap text-gray-600">
         {preset?.guide}
       </pre>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">API 地址</label>
-          <input
-            type="text"
-            value={formData.baseUrl}
-            onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+
+      {preset?.isOAuth ? (
+        <div className="space-y-4">
+          <button
+            onClick={handleCodexLogin}
+            disabled={oauthLoading}
+            className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {oauthLoading ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                等待浏览器授权...
+              </>
+            ) : (
+              "🔐 使用 ChatGPT 账号登录"
+            )}
+          </button>
+          {oauthError && (
+            <p className="text-red-500 text-sm">{oauthError}</p>
+          )}
         </div>
-        {preset?.needsKey && (
+      ) : (
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">API 地址</label>
             <input
-              type="password"
-              value={formData.apiKey}
-              onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+              type="text"
+              value={formData.baseUrl}
+              onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
-        )}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">模型名称（可选）</label>
-          <input
-            type="text"
-            value={formData.model}
-            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-            placeholder="留空使用默认模型"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+          {preset?.needsKey && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+              <input
+                type="password"
+                value={formData.apiKey}
+                onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">模型名称（可选）</label>
+            <input
+              type="text"
+              value={formData.model}
+              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+              placeholder="留空使用默认模型"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <button
+            onClick={handleSave}
+            className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            保存并开始使用
+          </button>
         </div>
-        <button
-          onClick={handleSave}
-          className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          保存并开始使用
-        </button>
-      </div>
+      )}
     </div>
   );
 }

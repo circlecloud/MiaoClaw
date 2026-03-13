@@ -15,3 +15,8 @@ export const aiAPI = {
     invoke<string>("ai_send_message", { messages, options, providerId }),
   listProviders: () => invoke<string[]>("ai_list_providers"),
 };
+
+export const codexAPI = {
+  login: () => invoke<{ success: boolean; expires_at?: number }>("codex_login"),
+  isLoggedIn: () => invoke<boolean>("codex_is_logged_in"),
+};

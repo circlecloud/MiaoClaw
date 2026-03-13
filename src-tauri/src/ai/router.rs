@@ -87,4 +87,9 @@ impl AIRouter {
     pub fn list_providers(&self) -> Vec<String> {
         self.providers.blocking_read().keys().cloned().collect()
     }
+
+    /// 检查是否有指定 Provider
+    pub fn has_provider(&self, id: &str) -> bool {
+        self.providers.blocking_read().contains_key(id)
+    }
 }

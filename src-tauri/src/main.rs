@@ -32,6 +32,8 @@ fn main() {
             config_patch,
             config_is_first_run,
             config_validate_provider,
+            codex_login,
+            codex_is_logged_in,
             ai_send_message,
             ai_list_providers,
             channel_list,
@@ -144,6 +146,9 @@ fn main() {
                 }
                 let provider: Box<dyn miaoclaw_lib::ai::AIProvider> = if id == "ollama" {
                     Box::new(OllamaProvider::new(&entry.base_url))
+                } else if id == "codex" {
+                    // Codex 需要 OAuth 登录，这里跳过，由前端触发
+                    continue;
                 } else {
                     Box::new(OpenAICompatProvider::new(
                         &entry.base_url,
