@@ -13,26 +13,11 @@ const ANIMATION_STYLES: Record<PetAnimation, string> = {
   custom: "",
 };
 
-const ANIMATION_EMOJI: Record<PetAnimation, string> = {
-  idle: "🐱",
-  walk: "🐱‍👤",
-  talk: "😺",
-  sleep: "😴",
-  happy: "😸",
-  sad: "😿",
-  think: "🤔",
-  wave: "👋",
-  eat: "😋",
-  custom: "🐱",
-};
-
 /**
- * CSS + SVG 极简风渲染器
- * 零外部依赖，纯 CSS 动画
+ * CSS 极简风渲染器 - 使用 pet.png 作为默认形象
  */
 export function CSSRenderer({ animation, width, height }: PetRendererProps) {
   const animClass = ANIMATION_STYLES[animation] || "";
-  const emoji = ANIMATION_EMOJI[animation] || "🐱";
 
   return (
     <div
@@ -40,9 +25,12 @@ export function CSSRenderer({ animation, width, height }: PetRendererProps) {
       style={{ width, height }}
     >
       <div className="relative">
-        <span className="text-6xl drop-shadow-lg" role="img" aria-label="pet">
-          {emoji}
-        </span>
+        <img
+          src="/pets/pet.png"
+          alt="MiaoClaw"
+          draggable={false}
+          style={{ width: width * 0.85, height: height * 0.85, objectFit: "contain" }}
+        />
         {animation === "talk" && (
           <div className="absolute -top-8 -right-4 bg-white rounded-lg px-2 py-1 text-xs shadow-md">
             💬

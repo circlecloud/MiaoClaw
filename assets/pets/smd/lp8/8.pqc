@@ -1,0 +1,4 @@
+$body bt.smd
+$anim walk walk.smd
+$anim idle idle.smd
+$scale 22.0
