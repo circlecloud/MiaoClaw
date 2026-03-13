@@ -134,12 +134,24 @@ fn main() {
                 }
             }
 
-            // Windows
+            // Windows: 去掉残留边框 + 触发 resize 刷新透明
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.get_webview_window("pet") {
                     use tauri::window::Color;
                     let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
+                    let _ = window.set_shadow(false);
+
+                    // 触发 resize 刷新，解决 Windows 透明窗口初始白背景问题
+                    let size = window.outer_size().unwrap();
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: size.width + 1,
+                        height: size.height + 1,
+                    }));
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: size.width,
+                        height: size.height,
+                    }));
                 }
             }
 
