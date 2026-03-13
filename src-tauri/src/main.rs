@@ -13,22 +13,19 @@ use miaoclaw_lib::plugin::PluginEngine;
 
 /// macOS: 递归遍历子视图，找到 WKWebView 并设置透明背景
 #[cfg(target_os = "macos")]
+#[allow(deprecated)]
 unsafe fn set_webview_transparent(view: cocoa::base::id) {
-    use cocoa::appkit::NSView;
-    use cocoa::base::{id, nil, NO};
+    use cocoa::base::{id, NO};
     use objc::{msg_send, sel, sel_impl, class};
 
-    // 检查是否是 WKWebView
     let wk_class = class!(WKWebView);
     let is_wk: bool = msg_send![view, isKindOfClass: wk_class];
     if is_wk {
-        // WKWebView 支持 _setDrawsBackground:
         let _: () = msg_send![view, _setDrawsBackground: NO];
         return;
     }
 
-    // 递归子视图
-    let subviews: id = view.subviews();
+    let subviews: id = msg_send![view, subviews];
     let count: usize = msg_send![subviews, count];
     for i in 0..count {
         let subview: id = msg_send![subviews, objectAtIndex: i];
@@ -216,10 +213,10 @@ fn main() {
             // macOS
             #[cfg(target_os = "macos")]
             {
+                #[allow(deprecated)]
                 if let Some(window) = app.get_webview_window("pet") {
-                    use cocoa::appkit::{NSColor, NSWindow, NSView};
+                    use cocoa::appkit::{NSColor, NSWindow};
                     use cocoa::base::{id, nil, NO};
-                    use objc::{msg_send, sel, sel_impl};
 
                     let ns_window = window.ns_window().unwrap() as id;
                     unsafe {
@@ -228,7 +225,6 @@ fn main() {
                         ns_window.setOpaque_(NO);
                         ns_window.setHasShadow_(NO);
 
-                        // 遍历子视图找到 WKWebView 并设置透明
                         let content_view: id = ns_window.contentView();
                         set_webview_transparent(content_view);
                     }

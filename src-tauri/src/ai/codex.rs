@@ -383,16 +383,6 @@ impl CodexProvider {
     }
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-mod hex {
-    pub fn encode(bytes: &[u8]) -> String {
-        super::hex_encode(bytes)
-    }
-}
-
 fn base64_url_encode(bytes: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
