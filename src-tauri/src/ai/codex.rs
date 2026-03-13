@@ -6,12 +6,10 @@ use tokio::sync::mpsc;
 
 use super::provider::*;
 
-/// Codex OAuth 常量 (与 OpenAI Codex CLI 一致)
-const AUTH_URL: &str = "https://auth.openai.com/authorize";
+/// Codex OAuth 常量
+const AUTH_URL: &str = "https://auth.openai.com/oauth/authorize";
 const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
-const CLIENT_ID: &str = "DJvkhBIkFdITpUCLNXbfn";
-const AUDIENCE: &str = "https://api.openai.com/v1";
-const REDIRECT_PORT: u16 = 1455;
+const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CALLBACK_PATH: &str = "/auth/callback";
 const SCOPE: &str = "openid profile email offline_access";
 const API_BASE: &str = "https://api.openai.com";
@@ -78,33 +76,33 @@ impl CodexProvider {
         let (verifier, challenge) = Self::generate_pkce();
 
         let state: String = {
-            let mut buf = [0u8; 16];
+            let mut buf = [0u8; 32];
             rand::fill(&mut buf);
-            hex::encode(&buf)
+            base64_url_encode(&buf)
         };
 
-        let redirect_uri = format!("http://localhost:{}{}", REDIRECT_PORT, CALLBACK_PATH);
+        // 动态端口：绑定 0 让 OS 分配
+        let server = tiny_http::Server::http(
+            "127.0.0.1:0"
+        ).map_err(|e| AIError::ApiError(format!("无法启动回调服务器: {}", e)))?;
+
+        let port = server.server_addr().to_ip().unwrap().port();
+        let redirect_uri = format!("http://localhost:{}{}", port, CALLBACK_PATH);
 
         let auth_url = format!(
-            "{}?client_id={}&redirect_uri={}&response_type=code&scope={}&audience={}&code_challenge={}&code_challenge_method=S256&state={}",
+            "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&id_token_add_organizations=true&codex_cli_simplified_flow=true&state={}&originator=miaoclaw",
             AUTH_URL,
             CLIENT_ID,
             urlencoding::encode(&redirect_uri),
             urlencoding::encode(SCOPE),
-            urlencoding::encode(AUDIENCE),
             challenge,
-            state,
+            urlencoding::encode(&state),
         );
 
         // 打开浏览器
         let _ = open::that(&auth_url);
 
-        // 启动本地 HTTP 服务器等待回调
-        let server = tiny_http::Server::http(
-            format!("127.0.0.1:{}", REDIRECT_PORT)
-        ).map_err(|e| AIError::ApiError(format!("无法启动回调服务器: {}", e)))?;
-
-        tracing::info!("等待 Codex OAuth 回调 (port {})...", REDIRECT_PORT);
+        tracing::info!("等待 Codex OAuth 回调 (port {})...", port);
 
         // 循环接收请求，直到收到 /auth/callback
         let callback_url;
@@ -268,6 +266,11 @@ mod hex {
     pub fn encode(bytes: &[u8]) -> String {
         super::hex_encode(bytes)
     }
+}
+
+fn base64_url_encode(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
 mod urlencoding {
