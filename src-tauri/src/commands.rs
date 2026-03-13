@@ -183,6 +183,13 @@ pub async fn plugin_call_tool(
 // ─── Pet Commands ───
 
 #[tauri::command]
+pub fn pet_set_ignore_cursor(window: tauri::WebviewWindow, ignore: bool) -> CmdResult<()> {
+    window
+        .set_ignore_cursor_events(ignore)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn pet_get_state() -> CmdResult<crate::storage::db::PetState> {
     Ok(crate::storage::db::PetState {
         current_style: "css".into(),

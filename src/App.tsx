@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { PetRenderer } from "./components/Pet/PetRenderer";
 import { ChatWindow } from "./components/Chat/ChatWindow";
 import { SettingsPanel } from "./components/Settings/SettingsPanel";
 import { AISetupWizard } from "./components/Settings/AISetupWizard";
 import { usePetStore } from "./stores/petStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useClickThrough } from "./hooks/useClickThrough";
 
 type Route = "pet" | "chat" | "settings";
 
@@ -19,6 +20,9 @@ export default function App() {
   const [route, setRoute] = useState<Route>(getRoute);
   const { currentStyle, currentAnimation } = usePetStore();
   const { isFirstRun } = useSettingsStore();
+  const petContainerRef = useRef<HTMLDivElement>(null);
+
+  useClickThrough(petContainerRef);
 
   useEffect(() => {
     const onHashChange = () => setRoute(getRoute());
@@ -30,6 +34,7 @@ export default function App() {
   if (route === "pet") {
     return (
       <div
+        ref={petContainerRef}
         className="w-full h-full"
         data-tauri-drag-region
         style={{

@@ -40,6 +40,7 @@ fn main() {
             channel_send,
             plugin_list,
             plugin_call_tool,
+            pet_set_ignore_cursor,
             pet_get_state,
         ])
         .on_window_event(|window, event| {
