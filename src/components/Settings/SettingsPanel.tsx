@@ -11,7 +11,7 @@ const PET_STYLES: { value: PetStyle; label: string; icon: string }[] = [
 ];
 
 export function SettingsPanel() {
-  const { config, updateConfig } = useSettingsStore();
+  const { config, updatePet } = useSettingsStore();
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -23,9 +23,9 @@ export function SettingsPanel() {
           {PET_STYLES.map((style) => (
             <button
               key={style.value}
-              onClick={() => updateConfig({ petStyle: style.value })}
+              onClick={() => updatePet({ style: style.value })}
               className={`p-3 border rounded-lg text-center transition-colors ${
-                config.petStyle === style.value
+                config.pet.style === style.value
                   ? "border-blue-500 bg-blue-50"
                   : "border-gray-200 hover:border-gray-400"
               }`}
@@ -44,8 +44,8 @@ export function SettingsPanel() {
             <span className="text-sm">窗口置顶</span>
             <input
               type="checkbox"
-              checked={config.alwaysOnTop}
-              onChange={(e) => updateConfig({ alwaysOnTop: e.target.checked })}
+              checked={config.pet.alwaysOnTop}
+              onChange={(e) => updatePet({ alwaysOnTop: e.target.checked })}
               className="rounded"
             />
           </label>
@@ -53,8 +53,8 @@ export function SettingsPanel() {
             <span className="text-sm">开机自启</span>
             <input
               type="checkbox"
-              checked={config.autoStart}
-              onChange={(e) => updateConfig({ autoStart: e.target.checked })}
+              checked={config.pet.autoStart}
+              onChange={(e) => updatePet({ autoStart: e.target.checked })}
               className="rounded"
             />
           </label>
@@ -62,8 +62,8 @@ export function SettingsPanel() {
             <label className="block text-sm mb-1">全局快捷键</label>
             <input
               type="text"
-              value={config.globalShortcut}
-              onChange={(e) => updateConfig({ globalShortcut: e.target.value })}
+              value={config.pet.globalShortcut}
+              onChange={(e) => updatePet({ globalShortcut: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
@@ -72,17 +72,17 @@ export function SettingsPanel() {
 
       <section>
         <h2 className="text-lg font-semibold mb-3">AI Provider</h2>
-        {config.providers.length === 0 ? (
+        {Object.keys(config.models.providers).length === 0 ? (
           <p className="text-gray-400 text-sm">尚未配置任何 AI Provider</p>
         ) : (
           <div className="space-y-2">
-            {config.providers.map((p) => (
+            {Object.entries(config.models.providers).map(([id, p]) => (
               <div
-                key={p.id}
+                key={id}
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
               >
                 <div>
-                  <p className="text-sm font-medium">{p.displayName}</p>
+                  <p className="text-sm font-medium">{p.displayName || id}</p>
                   <p className="text-xs text-gray-400">{p.baseUrl}</p>
                 </div>
                 <span

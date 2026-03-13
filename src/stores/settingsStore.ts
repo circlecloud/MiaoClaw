@@ -1,22 +1,27 @@
 import { create } from "zustand";
-import type { AppConfig, ProviderConfig } from "../types";
+import type { AppConfig, ProviderEntry } from "../types";
 
 interface SettingsStore {
   config: AppConfig;
   isFirstRun: boolean;
   updateConfig: (partial: Partial<AppConfig>) => void;
-  addProvider: (provider: ProviderConfig) => void;
+  updatePet: (partial: Partial<AppConfig["pet"]>) => void;
+  addProvider: (id: string, entry: ProviderEntry) => void;
   removeProvider: (id: string) => void;
   setFirstRun: (value: boolean) => void;
 }
 
 const defaultConfig: AppConfig = {
-  providers: [],
-  petStyle: "css",
-  alwaysOnTop: true,
-  autoStart: false,
-  globalShortcut: "CommandOrControl+Shift+M",
-  language: "zh-CN",
+  identity: { name: "MiaoClaw", theme: "可爱的桌面宠物猫", emoji: "🐱" },
+  models: { fallbacks: [], providers: {} },
+  channels: {},
+  plugins: { dirs: [], config: {} },
+  pet: {
+    style: "css",
+    alwaysOnTop: true,
+    autoStart: false,
+    globalShortcut: "CommandOrControl+Shift+M",
+  },
 };
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -26,21 +31,32 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   updateConfig: (partial) =>
     set((state) => ({ config: { ...state.config, ...partial } })),
 
-  addProvider: (provider) =>
+  updatePet: (partial) =>
+    set((state) => ({
+      config: { ...state.config, pet: { ...state.config.pet, ...partial } },
+    })),
+
+  addProvider: (id, entry) =>
     set((state) => ({
       config: {
         ...state.config,
-        providers: [...state.config.providers, provider],
+        models: {
+          ...state.config.models,
+          providers: { ...state.config.models.providers, [id]: entry },
+        },
       },
     })),
 
   removeProvider: (id) =>
-    set((state) => ({
-      config: {
-        ...state.config,
-        providers: state.config.providers.filter((p) => p.id !== id),
-      },
-    })),
+    set((state) => {
+      const { [id]: _, ...rest } = state.config.models.providers;
+      return {
+        config: {
+          ...state.config,
+          models: { ...state.config.models, providers: rest },
+        },
+      };
+    }),
 
   setFirstRun: (value) => set({ isFirstRun: value }),
 }));
