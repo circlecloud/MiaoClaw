@@ -16,7 +16,13 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
     clips: Map<string, THREE.AnimationClip>;
     currentAction?: THREE.AnimationAction;
     frameId?: number;
-  }>({ clips: new Map() });
+    pivot?: THREE.Group;
+    // 视角控制
+    rotY: number;
+    rotX: number;
+    dragging: boolean;
+    lastMouse: { x: number; y: number };
+  }>({ clips: new Map(), rotY: 0, rotX: 0, dragging: false, lastMouse: { x: 0, y: 0 } });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -34,8 +40,6 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 10000);
-    camera.position.set(0, 3, 8);
-    camera.lookAt(0, 2, 0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 2.0));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -51,6 +55,31 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
       console.error("SMD 模型加载失败:", err);
     });
 
+    // Ctrl+拖拽旋转视角
+    const canvas = renderer.domElement;
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.ctrlKey) {
+        state.dragging = true;
+        state.lastMouse = { x: e.clientX, y: e.clientY };
+      }
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!state.dragging || !state.pivot) return;
+      const dx = e.clientX - state.lastMouse.x;
+      const dy = e.clientY - state.lastMouse.y;
+      state.rotY += dx * 0.01;
+      state.rotX += dy * 0.01;
+      state.rotX = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, state.rotX));
+      state.pivot.rotation.y = state.rotY;
+      state.pivot.rotation.x = state.rotX;
+      state.lastMouse = { x: e.clientX, y: e.clientY };
+    };
+    const onMouseUp = () => { state.dragging = false; };
+
+    canvas.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
     const clock = new THREE.Clock();
     const animate = () => {
       state.frameId = requestAnimationFrame(animate);
@@ -62,6 +91,9 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
 
     return () => {
       if (state.frameId) cancelAnimationFrame(state.frameId);
+      canvas.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
@@ -69,6 +101,7 @@ export function SMDRenderer({ animation, width, height }: PetRendererProps) {
     };
   }, [width, height]);
 
+  // 切换动画
   useEffect(() => {
     const state = stateRef.current;
     if (!state.mixer) return;
@@ -101,55 +134,52 @@ async function loadModel(
     mixer?: THREE.AnimationMixer;
     clips: Map<string, THREE.AnimationClip>;
     currentAction?: THREE.AnimationAction;
+    pivot?: THREE.Group;
+    rotY: number;
   },
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
 ) {
-  console.log("[SMD] 开始加载模型...");
-
   const pqcResp = await fetch(`${MODEL_BASE}/8.pqc`);
-  if (!pqcResp.ok) {
-    throw new Error(`PQC 加载失败: ${pqcResp.status}`);
-  }
-  const pqcText = await pqcResp.text();
-  const config = parsePQC(pqcText);
-  console.log("[SMD] PQC 配置:", config);
+  if (!pqcResp.ok) throw new Error(`PQC 加载失败: ${pqcResp.status}`);
+  const config = parsePQC(await pqcResp.text());
 
   const bodyResp = await fetch(`${MODEL_BASE}/${config.body}`);
-  if (!bodyResp.ok) {
-    throw new Error(`Body SMD 加载失败: ${bodyResp.status}`);
-  }
-  const bodyText = await bodyResp.text();
-  const bodySMD = parseSMD(bodyText);
-  console.log("[SMD] Body 解析完成:", bodySMD.triangles.length, "个三角形,", bodySMD.bones.length, "个骨骼");
+  if (!bodyResp.ok) throw new Error(`Body SMD 加载失败: ${bodyResp.status}`);
+  const bodySMD = parseSMD(await bodyResp.text());
 
-  const texture = await new THREE.TextureLoader().loadAsync(
-    `${MODEL_BASE}/cresselia-lp.png`,
-  );
+  const texture = await new THREE.TextureLoader().loadAsync(`${MODEL_BASE}/cresselia-lp.png`);
   texture.colorSpace = THREE.SRGBColorSpace;
-  console.log("[SMD] 贴图加载完成");
 
   const { mesh } = buildSkinnedMesh(bodySMD, texture, config.scale);
-  scene.add(mesh);
 
-  // 自动适配相机：计算模型包围盒
+  // 用 pivot group 包裹模型，方便旋转
+  const pivot = new THREE.Group();
+  pivot.add(mesh);
+  scene.add(pivot);
+  state.pivot = pivot;
+
+  // 计算包围盒，自动适配相机
   const box = new THREE.Box3().setFromObject(mesh);
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
-  console.log("[SMD] 模型包围盒 center:", center, "size:", size, "maxDim:", maxDim);
+  // 把 pivot 原点移到模型中心
+  pivot.position.set(-center.x, -center.y, -center.z);
 
-  // 相机对准模型中心，距离根据模型大小调整
+  // 旋转模型到正面（SMD 模型默认朝向可能不对）
+  // 先旋转 180 度让模型面向相机
+  state.rotY = Math.PI;
+  pivot.rotation.y = state.rotY;
+
   const fov = camera.fov * (Math.PI / 180);
-  const dist = maxDim / (2 * Math.tan(fov / 2)) * 1.2;
-  camera.position.set(center.x, center.y, center.z + dist);
-  camera.lookAt(center);
+  const dist = maxDim / (2 * Math.tan(fov / 2)) * 1.3;
+  camera.position.set(0, 0, dist);
+  camera.lookAt(0, 0, 0);
   camera.near = dist / 100;
   camera.far = dist * 100;
   camera.updateProjectionMatrix();
-
-  console.log("[SMD] 相机位置:", camera.position, "距离:", dist);
 
   // 动画
   const mixer = new THREE.AnimationMixer(mesh);
@@ -159,11 +189,9 @@ async function loadModel(
     try {
       const resp = await fetch(`${MODEL_BASE}/${file}`);
       if (!resp.ok) continue;
-      const text = await resp.text();
-      const animSMD = parseSMD(text);
+      const animSMD = parseSMD(await resp.text());
       const clip = buildAnimationClip(name, animSMD, bodySMD.bones, config.scale);
       state.clips.set(name, clip);
-      console.log("[SMD] 动画加载:", name, clip.duration.toFixed(2) + "s");
     } catch (err) {
       console.warn("[SMD] 动画加载失败:", name, err);
     }
@@ -174,8 +202,5 @@ async function loadModel(
     const action = mixer.clipAction(idleClip);
     action.play();
     state.currentAction = action;
-    console.log("[SMD] 播放 idle 动画");
   }
-
-  console.log("[SMD] 模型加载完成");
 }

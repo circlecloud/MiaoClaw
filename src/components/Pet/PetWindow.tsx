@@ -5,12 +5,11 @@ import { useClickThrough } from "../../hooks/useClickThrough";
 import { listen } from "@tauri-apps/api/event";
 import type { PetStyle } from "../../types";
 
-/**
- * 宠物窗口 - 只在 pet 路由渲染，包含点击穿透逻辑
- */
 export function PetWindow() {
   const { currentStyle, currentAnimation, setStyle } = usePetStore();
   const containerRef = useRef<HTMLDivElement>(null);
+  const renderWrapRef = useRef<HTMLDivElement>(null);
+  const ctrlHeld = useRef(false);
 
   useClickThrough(containerRef);
 
@@ -21,6 +20,32 @@ export function PetWindow() {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [setStyle]);
+
+  // Ctrl 键：切换渲染层 pointer-events，允许 canvas 交互（旋转视角）
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Control" && !ctrlHeld.current) {
+        ctrlHeld.current = true;
+        if (renderWrapRef.current) {
+          renderWrapRef.current.style.pointerEvents = "auto";
+        }
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Control") {
+        ctrlHeld.current = false;
+        if (renderWrapRef.current) {
+          renderWrapRef.current.style.pointerEvents = "none";
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
 
   return (
     <div
@@ -34,7 +59,7 @@ export function PetWindow() {
         backgroundColor: "transparent",
       }}
     >
-      <div style={{ pointerEvents: "none" }}>
+      <div ref={renderWrapRef} style={{ pointerEvents: "none" }}>
         <PetRenderer
           style={currentStyle}
           animation={currentAnimation}
