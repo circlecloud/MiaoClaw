@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PetRendererProps, PetAnimation } from "../../types";
 
 const ANIMATION_STYLES: Record<PetAnimation, string> = {
@@ -14,10 +15,11 @@ const ANIMATION_STYLES: Record<PetAnimation, string> = {
 };
 
 /**
- * CSS 极简风渲染器 - 使用 pet.png 作为默认形象
+ * CSS 极简风渲染器 - 使用 pet.png，加载失败回退到 emoji
  */
 export function CSSRenderer({ animation, width, height }: PetRendererProps) {
   const animClass = ANIMATION_STYLES[animation] || "";
+  const [imgError, setImgError] = useState(false);
 
   return (
     <div
@@ -25,12 +27,17 @@ export function CSSRenderer({ animation, width, height }: PetRendererProps) {
       style={{ width, height }}
     >
       <div className="relative">
-        <img
-          src="/pets/pet.png"
-          alt="MiaoClaw"
-          draggable={false}
-          style={{ width: width * 0.85, height: height * 0.85, objectFit: "contain" }}
-        />
+        {imgError ? (
+          <span style={{ fontSize: width * 0.6 }}>🐱</span>
+        ) : (
+          <img
+            src="/pets/pet.png"
+            alt="MiaoClaw"
+            draggable={false}
+            onError={() => setImgError(true)}
+            style={{ width: width * 0.85, height: height * 0.85, objectFit: "contain" }}
+          />
+        )}
         {animation === "talk" && (
           <div className="absolute -top-8 -right-4 bg-white rounded-lg px-2 py-1 text-xs shadow-md">
             💬

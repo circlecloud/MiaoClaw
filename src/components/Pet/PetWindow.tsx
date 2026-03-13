@@ -1,8 +1,9 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { PetRenderer } from "./PetRenderer";
 import { usePetStore } from "../../stores/petStore";
 import { useClickThrough } from "../../hooks/useClickThrough";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { PetStyle } from "../../types";
 
 export function PetWindow() {
@@ -47,14 +48,19 @@ export function PetWindow() {
     };
   }, []);
 
+  // 拖拽：用 startDragging API，兼容所有平台
+  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
+    if (e.button === 0 && !ctrlHeld.current) {
+      await getCurrentWindow().startDragging().catch(() => {});
+    }
+  }, []);
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full"
-      data-tauri-drag-region
+      onMouseDown={handleMouseDown}
       style={{
-        // @ts-expect-error webkit vendor prefix
-        WebkitAppRegion: "drag",
         cursor: "grab",
         backgroundColor: "transparent",
       }}
