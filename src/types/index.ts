@@ -27,6 +27,7 @@ export interface PetRendererProps {
   width: number;
   height: number;
   onAnimationEnd?: () => void;
+  onInteractionStateChange?: (interactive: boolean) => void;
   customData?: Record<string, unknown>;
 }
 

@@ -9,11 +9,22 @@ import { invoke } from "@tauri-apps/api/core";
  * - alpha > 0 → 关闭穿透（可拖拽）
  * - alpha = 0 → 开启穿透（点击到桌面）
  */
-export function useClickThrough(containerRef: React.RefObject<HTMLElement | null>) {
+export function useClickThrough(
+  containerRef: React.RefObject<HTMLElement | null>,
+  enabled: boolean,
+) {
   const ignoring = useRef(false);
   const lastPos = useRef({ x: -1, y: -1 });
 
   useEffect(() => {
+    if (!enabled) {
+      if (ignoring.current) {
+        ignoring.current = false;
+        invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+      }
+      return;
+    }
+
     const onMouseMove = (e: MouseEvent) => {
       lastPos.current = { x: e.clientX, y: e.clientY };
     };
@@ -44,7 +55,7 @@ export function useClickThrough(containerRef: React.RefObject<HTMLElement | null
       document.removeEventListener("mousemove", onMouseMove);
       invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
     };
-  }, [containerRef]);
+  }, [containerRef, enabled]);
 }
 
 /**

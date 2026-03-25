@@ -8,7 +8,7 @@ import { CSSRenderer } from "./CSSRenderer";
 const MODEL_BASE = "/pets/smd/lp8";
 
 export function SMDRenderer(props: PetRendererProps) {
-  const { animation, width, height } = props;
+  const { animation, width, height, onInteractionStateChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState(false);
   const stateRef = useRef<{
@@ -65,6 +65,7 @@ export function SMDRenderer(props: PetRendererProps) {
       if (e.ctrlKey) {
         state.dragging = true;
         state.lastMouse = { x: e.clientX, y: e.clientY };
+        onInteractionStateChange?.(true);
       }
     };
     const onMouseMove = (e: MouseEvent) => {
@@ -98,12 +99,13 @@ export function SMDRenderer(props: PetRendererProps) {
       canvas.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      onInteractionStateChange?.(false);
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, [width, height]);
+  }, [width, height, onInteractionStateChange]);
 
   // 切换动画
   useEffect(() => {
