@@ -65,6 +65,7 @@ fn main() {
             plugin_list,
             plugin_call_tool,
             pet_set_ignore_cursor,
+            pet_cursor_info,
             pet_get_state,
         ])
         .on_window_event(|window, event| {

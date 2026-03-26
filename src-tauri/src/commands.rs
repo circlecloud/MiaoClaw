@@ -232,11 +232,31 @@ pub async fn plugin_call_tool(
 
 // ─── Pet Commands ───
 
+#[derive(serde::Serialize)]
+pub struct PetCursorInfo {
+    pub x: f64,
+    pub y: f64,
+    pub inside: bool,
+}
+
 #[tauri::command]
 pub fn pet_set_ignore_cursor(window: tauri::WebviewWindow, ignore: bool) -> CmdResult<()> {
     window
         .set_ignore_cursor_events(ignore)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn pet_cursor_info(window: tauri::WebviewWindow) -> CmdResult<PetCursorInfo> {
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let outer = window.outer_position().map_err(|e| e.to_string())?;
+    let size = window.outer_size().map_err(|e| e.to_string())?;
+
+    let x = cursor.x - outer.x as f64;
+    let y = cursor.y - outer.y as f64;
+    let inside = x >= 0.0 && y >= 0.0 && x < size.width as f64 && y < size.height as f64;
+
+    Ok(PetCursorInfo { x, y, inside })
 }
 
 #[tauri::command]
