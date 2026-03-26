@@ -49,6 +49,7 @@ export function PetWindow() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== "Control") return;
       ctrlHeldRef.current = false;
+      console.debug("[PetWindow] Ctrl up");
       void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
       if (renderWrapRef.current) {
         renderWrapRef.current.style.pointerEvents = "none";
@@ -58,6 +59,7 @@ export function PetWindow() {
 
     const clearWindowDragging = () => {
       if (windowDraggingRef.current) {
+        console.debug("[PetWindow] window drag end");
         windowDraggingRef.current = false;
         syncInteractionMode();
       }
@@ -76,20 +78,28 @@ export function PetWindow() {
     };
   }, [syncInteractionMode]);
 
-  const handleMouseDownCapture = useCallback(async (e: React.MouseEvent) => {
+  const handleMouseDownCapture = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     if (ctrlHeldRef.current || modelInteractingRef.current) return;
 
+    console.debug("[PetWindow] start window drag", {
+      ctrl: ctrlHeldRef.current,
+      modelInteracting: modelInteractingRef.current,
+    });
+
     windowDraggingRef.current = true;
     syncInteractionMode();
-    await invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+    e.preventDefault();
 
-    try {
-      await getCurrentWindow().startDragging();
-    } catch {
-      windowDraggingRef.current = false;
-      syncInteractionMode();
-    }
+    // 不等待，避免丢失原生拖动手势
+    void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+    void getCurrentWindow()
+      .startDragging()
+      .catch((err) => {
+        console.debug("[PetWindow] startDragging failed", err);
+        windowDraggingRef.current = false;
+        syncInteractionMode();
+      });
   }, [syncInteractionMode]);
 
   return (

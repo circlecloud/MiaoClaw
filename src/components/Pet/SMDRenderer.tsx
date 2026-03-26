@@ -88,6 +88,7 @@ export function SMDRenderer(props: PetRendererProps) {
 
     const onMouseUp = () => {
       if (!state.dragging) return;
+      console.debug("[SMD] end camera orbit");
       state.dragging = false;
       onInteractionStateChange?.(false);
     };
