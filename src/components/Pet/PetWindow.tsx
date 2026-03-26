@@ -11,77 +11,94 @@ export function PetWindow() {
   const { currentStyle, currentAnimation, setStyle } = usePetStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const renderWrapRef = useRef<HTMLDivElement>(null);
-  const ctrlHeld = useRef(false);
-  const draggingWindowRef = useRef(false);
+
+  const ctrlHeldRef = useRef(false);
+  const windowDraggingRef = useRef(false);
+  const modelInteractingRef = useRef(false);
+
   const [interactionMode, setInteractionMode] = useState(false);
+
+  const syncInteractionMode = useCallback(() => {
+    const active =
+      ctrlHeldRef.current || windowDraggingRef.current || modelInteractingRef.current;
+    setInteractionMode(active);
+  }, []);
 
   useClickThrough(containerRef, !interactionMode);
 
-  // 监听设置窗口发来的风格切换事件
   useEffect(() => {
     const unlisten = listen<{ style: PetStyle }>("pet-style-changed", (event) => {
       setStyle(event.payload.style);
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, [setStyle]);
 
-  // Ctrl 键：进入 3D 交互模式，暂停 click-through
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Control" && !ctrlHeld.current) {
-        ctrlHeld.current = true;
-        setInteractionMode(true);
-        invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
-        if (renderWrapRef.current) {
-          renderWrapRef.current.style.pointerEvents = "auto";
-        }
+      if (e.key !== "Control" || ctrlHeldRef.current) return;
+      ctrlHeldRef.current = true;
+      void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+      if (renderWrapRef.current) {
+        renderWrapRef.current.style.pointerEvents = "auto";
       }
+      syncInteractionMode();
     };
+
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Control") {
-        ctrlHeld.current = false;
-        setInteractionMode(false);
-        invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
-        if (renderWrapRef.current) {
-          renderWrapRef.current.style.pointerEvents = "none";
-        }
+      if (e.key !== "Control") return;
+      ctrlHeldRef.current = false;
+      void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+      if (renderWrapRef.current) {
+        renderWrapRef.current.style.pointerEvents = "none";
+      }
+      syncInteractionMode();
+    };
+
+    const clearWindowDragging = () => {
+      if (windowDraggingRef.current) {
+        windowDraggingRef.current = false;
+        syncInteractionMode();
       }
     };
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("mouseup", clearWindowDragging);
+    window.addEventListener("blur", clearWindowDragging);
+
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("mouseup", clearWindowDragging);
+      window.removeEventListener("blur", clearWindowDragging);
     };
-  }, []);
+  }, [syncInteractionMode]);
 
-  // 拖拽：进入窗口拖动模式时暂停 click-through，避免被透明检测中断
-  const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
-    if (e.button !== 0 || interactionMode) return;
+  const handleMouseDownCapture = useCallback(async (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (ctrlHeldRef.current || modelInteractingRef.current) return;
 
-    draggingWindowRef.current = true;
-    setInteractionMode(true);
+    windowDraggingRef.current = true;
+    syncInteractionMode();
     await invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
 
     try {
       await getCurrentWindow().startDragging();
     } catch {
-      // ignore
-    } finally {
-      draggingWindowRef.current = false;
-      if (!ctrlHeld.current) {
-        setInteractionMode(false);
-      }
+      windowDraggingRef.current = false;
+      syncInteractionMode();
     }
-  }, [interactionMode]);
+  }, [syncInteractionMode]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full"
-      onMouseDown={handleMouseDown}
+      onMouseDownCapture={handleMouseDownCapture}
       style={{
-        cursor: "grab",
+        cursor: ctrlHeldRef.current ? "move" : "grab",
         backgroundColor: "transparent",
       }}
     >
@@ -92,7 +109,11 @@ export function PetWindow() {
           width={256}
           height={256}
           onInteractionStateChange={(interactive) => {
-            setInteractionMode(interactive || ctrlHeld.current || draggingWindowRef.current);
+            modelInteractingRef.current = interactive;
+            if (interactive) {
+              void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+            }
+            syncInteractionMode();
           }}
         />
       </div>

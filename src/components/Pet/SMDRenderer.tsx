@@ -7,25 +7,33 @@ import { CSSRenderer } from "./CSSRenderer";
 
 const MODEL_BASE = "/pets/smd/lp8";
 
+interface RendererState {
+  renderer?: THREE.WebGLRenderer;
+  scene?: THREE.Scene;
+  camera?: THREE.PerspectiveCamera;
+  mixer?: THREE.AnimationMixer;
+  clips: Map<string, THREE.AnimationClip>;
+  currentAction?: THREE.AnimationAction;
+  frameId?: number;
+  dragging: boolean;
+  lastMouse: { x: number; y: number };
+  yaw: number;
+  pitch: number;
+  radius: number;
+}
+
 export function SMDRenderer(props: PetRendererProps) {
   const { animation, width, height, onInteractionStateChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState(false);
-  const stateRef = useRef<{
-    renderer?: THREE.WebGLRenderer;
-    scene?: THREE.Scene;
-    camera?: THREE.PerspectiveCamera;
-    mixer?: THREE.AnimationMixer;
-    clips: Map<string, THREE.AnimationClip>;
-    currentAction?: THREE.AnimationAction;
-    frameId?: number;
-    pivot?: THREE.Group;
-    // 视角控制
-    rotY: number;
-    rotX: number;
-    dragging: boolean;
-    lastMouse: { x: number; y: number };
-  }>({ clips: new Map(), rotY: 0, rotX: 0, dragging: false, lastMouse: { x: 0, y: 0 } });
+  const stateRef = useRef<RendererState>({
+    clips: new Map(),
+    dragging: false,
+    lastMouse: { x: 0, y: 0 },
+    yaw: 0,
+    pitch: 0,
+    radius: 8,
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -59,27 +67,30 @@ export function SMDRenderer(props: PetRendererProps) {
       setLoadError(true);
     });
 
-    // Ctrl+拖拽旋转视角
     const canvas = renderer.domElement;
     const onMouseDown = (e: MouseEvent) => {
-      if (e.ctrlKey) {
-        state.dragging = true;
-        state.lastMouse = { x: e.clientX, y: e.clientY };
-        onInteractionStateChange?.(true);
-      }
+      if (!e.ctrlKey) return;
+      state.dragging = true;
+      state.lastMouse = { x: e.clientX, y: e.clientY };
+      onInteractionStateChange?.(true);
     };
+
     const onMouseMove = (e: MouseEvent) => {
-      if (!state.dragging || !state.pivot) return;
+      if (!state.dragging || !state.camera) return;
       const dx = e.clientX - state.lastMouse.x;
       const dy = e.clientY - state.lastMouse.y;
-      state.rotY += dx * 0.01;
-      state.rotX += dy * 0.01;
-      state.rotX = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, state.rotX));
-      state.pivot.rotation.y = state.rotY;
-      state.pivot.rotation.x = state.rotX;
+      state.yaw -= dx * 0.01;
+      state.pitch += dy * 0.01;
+      state.pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, state.pitch));
+      updateOrbitCamera(state.camera, state);
       state.lastMouse = { x: e.clientX, y: e.clientY };
     };
-    const onMouseUp = () => { state.dragging = false; };
+
+    const onMouseUp = () => {
+      if (!state.dragging) return;
+      state.dragging = false;
+      onInteractionStateChange?.(false);
+    };
 
     canvas.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mousemove", onMouseMove);
@@ -107,7 +118,6 @@ export function SMDRenderer(props: PetRendererProps) {
     };
   }, [width, height, onInteractionStateChange]);
 
-  // 切换动画
   useEffect(() => {
     const state = stateRef.current;
     if (!state.mixer) return;
@@ -134,19 +144,26 @@ export function SMDRenderer(props: PetRendererProps) {
 
 function mapAnimation(anim: PetAnimation): string {
   switch (anim) {
-    case "walk": return "walk";
-    default: return "idle";
+    case "walk":
+      return "walk";
+    default:
+      return "idle";
   }
 }
 
+function updateOrbitCamera(camera: THREE.PerspectiveCamera, state: RendererState) {
+  const cp = Math.cos(state.pitch);
+  camera.position.set(
+    state.radius * Math.sin(state.yaw) * cp,
+    state.radius * Math.sin(state.pitch),
+    state.radius * Math.cos(state.yaw) * cp,
+  );
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+}
+
 async function loadModel(
-  state: {
-    mixer?: THREE.AnimationMixer;
-    clips: Map<string, THREE.AnimationClip>;
-    currentAction?: THREE.AnimationAction;
-    pivot?: THREE.Group;
-    rotY: number;
-  },
+  state: RendererState,
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
 ) {
@@ -162,36 +179,27 @@ async function loadModel(
   texture.colorSpace = THREE.SRGBColorSpace;
 
   const { mesh } = buildSkinnedMesh(bodySMD, texture, config.scale);
+  scene.add(mesh);
 
-  // 用 pivot group 包裹模型，方便旋转
-  const pivot = new THREE.Group();
-  pivot.add(mesh);
-  scene.add(pivot);
-  state.pivot = pivot;
-
-  // 计算包围盒，自动适配相机
   const box = new THREE.Box3().setFromObject(mesh);
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
-  // 让模型相对 pivot 居中，这样旋转围绕模型中心而不是脚底/原点
+  // 把模型平移到世界原点，旋转和相机都围绕模型中心进行
   mesh.position.set(-center.x, -center.y, -center.z);
-
-  // 旋转模型到正面（SMD 模型默认朝向可能不对）
-  // 先旋转 180 度让模型面向相机
-  state.rotY = Math.PI;
-  pivot.rotation.y = state.rotY;
+  // 修正模型默认朝向，让初始看到正面
+  mesh.rotation.y = Math.PI;
 
   const fov = camera.fov * (Math.PI / 180);
-  const dist = maxDim / (2 * Math.tan(fov / 2)) * 1.3;
-  camera.position.set(0, 0, dist);
-  camera.lookAt(0, 0, 0);
+  const dist = (maxDim / (2 * Math.tan(fov / 2))) * 1.3;
+  state.radius = dist;
+  state.yaw = 0;
+  state.pitch = 0;
   camera.near = dist / 100;
   camera.far = dist * 100;
-  camera.updateProjectionMatrix();
+  updateOrbitCamera(camera, state);
 
-  // 动画
   const mixer = new THREE.AnimationMixer(mesh);
   state.mixer = mixer;
 
