@@ -70,6 +70,7 @@ export function SMDRenderer(props: PetRendererProps) {
     const canvas = renderer.domElement;
     const onMouseDown = (e: MouseEvent) => {
       if (!e.ctrlKey) return;
+      console.debug("[SMD] start camera orbit");
       state.dragging = true;
       state.lastMouse = { x: e.clientX, y: e.clientY };
       onInteractionStateChange?.(true);

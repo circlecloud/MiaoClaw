@@ -4,7 +4,6 @@ import { usePetStore } from "../../stores/petStore";
 import { useClickThrough } from "../../hooks/useClickThrough";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { PetStyle } from "../../types";
 
 export function PetWindow() {
@@ -13,7 +12,6 @@ export function PetWindow() {
   const renderWrapRef = useRef<HTMLDivElement>(null);
 
   const ctrlHeldRef = useRef(false);
-  const windowDraggingRef = useRef(false);
   const modelInteractingRef = useRef(false);
   const interactionModeRef = useRef(false);
 
@@ -21,8 +19,7 @@ export function PetWindow() {
   const [ctrlActive, setCtrlActive] = useState(false);
 
   const syncInteractionMode = useCallback(() => {
-    const active =
-      ctrlHeldRef.current || windowDraggingRef.current || modelInteractingRef.current;
+    const active = ctrlHeldRef.current || modelInteractingRef.current;
     interactionModeRef.current = active;
     setInteractionMode(active);
   }, []);
@@ -39,85 +36,69 @@ export function PetWindow() {
   }, [setStyle]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Control" || ctrlHeldRef.current) return;
-      ctrlHeldRef.current = true;
-      setCtrlActive(true);
-      console.debug("[PetWindow] Ctrl down");
-      interactionModeRef.current = true;
+    const setCtrlMode = (active: boolean) => {
+      ctrlHeldRef.current = active;
+      setCtrlActive(active);
       void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
       if (renderWrapRef.current) {
-        renderWrapRef.current.style.pointerEvents = "auto";
+        renderWrapRef.current.style.pointerEvents = active ? "auto" : "none";
       }
       syncInteractionMode();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Control" || ctrlHeldRef.current) return;
+      console.debug("[PetWindow] Ctrl down");
+      setCtrlMode(true);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== "Control") return;
-      ctrlHeldRef.current = false;
-      setCtrlActive(false);
       console.debug("[PetWindow] Ctrl up");
-      void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
-      if (renderWrapRef.current) {
-        renderWrapRef.current.style.pointerEvents = "none";
-      }
-      syncInteractionMode();
+      setCtrlMode(false);
     };
 
-    const clearWindowDragging = () => {
-      if (windowDraggingRef.current) {
-        console.debug("[PetWindow] window drag end");
-        windowDraggingRef.current = false;
-        syncInteractionMode();
+    // Windows 上如果先按 Ctrl 再把鼠标移到宠物上，窗口可能收不到 keydown
+    // 用 mousemove 补一次 e.ctrlKey 检测
+    const onMouseMove = (e: MouseEvent) => {
+      if (e.ctrlKey && !ctrlHeldRef.current) {
+        setCtrlMode(true);
+      } else if (!e.ctrlKey && ctrlHeldRef.current && !modelInteractingRef.current) {
+        setCtrlMode(false);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("mouseup", clearWindowDragging);
-    window.addEventListener("blur", clearWindowDragging);
+    window.addEventListener("mousemove", onMouseMove);
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("mouseup", clearWindowDragging);
-      window.removeEventListener("blur", clearWindowDragging);
+      window.removeEventListener("mousemove", onMouseMove);
     };
-  }, [syncInteractionMode]);
-
-  const handleMouseDownCapture = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    if (e.ctrlKey || ctrlHeldRef.current || modelInteractingRef.current) return;
-
-    console.debug("[PetWindow] start window drag", {
-      ctrl: ctrlHeldRef.current,
-      modelInteracting: modelInteractingRef.current,
-    });
-
-    windowDraggingRef.current = true;
-    interactionModeRef.current = true;
-    syncInteractionMode();
-    e.preventDefault();
-
-    void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
-    void getCurrentWindow().startDragging().catch((err) => {
-      console.debug("[PetWindow] startDragging failed", err);
-      windowDraggingRef.current = false;
-      syncInteractionMode();
-    });
   }, [syncInteractionMode]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full"
-      onMouseDownCapture={handleMouseDownCapture}
+      data-tauri-drag-region={!interactionMode ? true : undefined}
       style={{
-        cursor: ctrlActive ? "move" : interactionMode ? "grabbing" : "grab",
+        // @ts-expect-error webkit vendor prefix
+        WebkitAppRegion: interactionMode ? "no-drag" : "drag",
+        cursor: ctrlActive ? "move" : "grab",
         backgroundColor: "transparent",
       }}
     >
-      <div ref={renderWrapRef} style={{ pointerEvents: "none" }}>
+      <div
+        ref={renderWrapRef}
+        style={{
+          pointerEvents: interactionMode ? "auto" : "none",
+          // @ts-expect-error webkit vendor prefix
+          WebkitAppRegion: "no-drag",
+        }}
+      >
         <PetRenderer
           style={currentStyle}
           animation={currentAnimation}
