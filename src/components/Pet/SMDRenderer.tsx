@@ -175,8 +175,8 @@ async function loadModel(
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
-  // 把 pivot 原点移到模型中心
-  pivot.position.set(-center.x, -center.y, -center.z);
+  // 让模型相对 pivot 居中，这样旋转围绕模型中心而不是脚底/原点
+  mesh.position.set(-center.x, -center.y, -center.z);
 
   // 旋转模型到正面（SMD 模型默认朝向可能不对）
   // 先旋转 180 度让模型面向相机

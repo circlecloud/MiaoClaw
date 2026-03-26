@@ -12,6 +12,7 @@ export function PetWindow() {
   const containerRef = useRef<HTMLDivElement>(null);
   const renderWrapRef = useRef<HTMLDivElement>(null);
   const ctrlHeld = useRef(false);
+  const draggingWindowRef = useRef(false);
   const [interactionMode, setInteractionMode] = useState(false);
 
   useClickThrough(containerRef, !interactionMode);
@@ -54,10 +55,23 @@ export function PetWindow() {
     };
   }, []);
 
-  // 拖拽：用 startDragging API，兼容所有平台
+  // 拖拽：进入窗口拖动模式时暂停 click-through，避免被透明检测中断
   const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
-    if (e.button === 0 && !interactionMode) {
-      await getCurrentWindow().startDragging().catch(() => {});
+    if (e.button !== 0 || interactionMode) return;
+
+    draggingWindowRef.current = true;
+    setInteractionMode(true);
+    await invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+
+    try {
+      await getCurrentWindow().startDragging();
+    } catch {
+      // ignore
+    } finally {
+      draggingWindowRef.current = false;
+      if (!ctrlHeld.current) {
+        setInteractionMode(false);
+      }
     }
   }, [interactionMode]);
 
@@ -78,7 +92,7 @@ export function PetWindow() {
           width={256}
           height={256}
           onInteractionStateChange={(interactive) => {
-            setInteractionMode(interactive || ctrlHeld.current);
+            setInteractionMode(interactive || ctrlHeld.current || draggingWindowRef.current);
           }}
         />
       </div>
