@@ -7,30 +7,22 @@ interface PetCursorInfo {
   inside: boolean;
 }
 
-/**
- * 让窗口透明像素区域点击穿透。
- *
- * 关键修复：不再依赖前端 mousemove。
- * 改为轮询 Rust 侧的全局鼠标位置（相对窗口坐标），
- * 这样就算窗口当前处于 ignore cursor events 状态，
- * 也能在鼠标重新移回宠物不透明区域时恢复交互。
- */
 export function useClickThrough(
   containerRef: React.RefObject<HTMLElement | null>,
-  enabled: boolean,
+  suspendedRef: React.MutableRefObject<boolean>,
 ) {
   const ignoring = useRef(false);
 
   useEffect(() => {
-    if (!enabled) {
-      if (ignoring.current) {
-        ignoring.current = false;
-        invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
-      }
-      return;
-    }
-
     const interval = setInterval(async () => {
+      if (suspendedRef.current) {
+        if (ignoring.current) {
+          ignoring.current = false;
+          await invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+        }
+        return;
+      }
+
       const container = containerRef.current;
       if (!container) return;
 
@@ -57,21 +49,17 @@ export function useClickThrough(
 
     return () => {
       clearInterval(interval);
-      invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
+      void invoke("pet_set_ignore_cursor", { ignore: false }).catch(() => {});
     };
-  }, [containerRef, enabled]);
+  }, [containerRef, suspendedRef]);
 }
 
 function getAlphaAtPoint(container: HTMLElement, x: number, y: number): number {
   const canvas = container.querySelector("canvas");
-  if (canvas) {
-    return getCanvasAlpha(canvas, x, y);
-  }
+  if (canvas) return getCanvasAlpha(canvas, x, y);
 
   const img = container.querySelector("img");
-  if (img) {
-    return getImageAlpha(img, x, y);
-  }
+  if (img) return getImageAlpha(img, x, y);
 
   const el = document.elementFromPoint(x, y);
   if (!el || el === container || el === document.body || el === document.documentElement) {
@@ -79,9 +67,7 @@ function getAlphaAtPoint(container: HTMLElement, x: number, y: number): number {
   }
 
   for (const child of el.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
-      return 255;
-    }
+    if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) return 255;
   }
 
   const style = window.getComputedStyle(el);
@@ -101,10 +87,7 @@ function getCanvasAlpha(canvas: HTMLCanvasElement, x: number, y: number): number
     const rect = canvas.getBoundingClientRect();
     const localX = x - rect.left;
     const localY = y - rect.top;
-
-    if (localX < 0 || localY < 0 || localX >= rect.width || localY >= rect.height) {
-      return 0;
-    }
+    if (localX < 0 || localY < 0 || localX >= rect.width || localY >= rect.height) return 0;
 
     const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
     if (gl) {
@@ -139,10 +122,7 @@ function getImageAlpha(img: HTMLImageElement, x: number, y: number): number {
     const rect = img.getBoundingClientRect();
     const localX = x - rect.left;
     const localY = y - rect.top;
-
-    if (localX < 0 || localY < 0 || localX >= rect.width || localY >= rect.height) {
-      return 0;
-    }
+    if (localX < 0 || localY < 0 || localX >= rect.width || localY >= rect.height) return 0;
 
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth || rect.width;
